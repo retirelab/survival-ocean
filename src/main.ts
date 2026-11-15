@@ -4,8 +4,8 @@ import { OceanScene } from './scenes/OceanScene';
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: 800,
-  height: 600,
+  width: 480,
+  height: 854,
   backgroundColor: '#062845',
   scale: {
     mode: Phaser.Scale.FIT,
