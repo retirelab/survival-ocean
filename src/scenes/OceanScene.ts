@@ -22,7 +22,7 @@ interface FishSpec {
 }
 
 interface FishEntity {
-  sprite: Phaser.GameObjects.Image;
+  sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse;
   label: Phaser.GameObjects.Text;
   spec: FishSpec;
   hp: number;
@@ -94,11 +94,17 @@ export class OceanScene extends Phaser.Scene {
 
   private spawnTimer = 0;
   private shootCooldown = 0;
-  private texturesReady = false;
-  private pendingLoads = 0;
 
   constructor() {
     super('OceanScene');
+  }
+
+  preload() {
+    for (const [key, dataUrl] of Object.entries(FISH_SPRITES)) {
+      if (!this.textures.exists(key)) {
+        this.load.image(key, dataUrl);
+      }
+    }
   }
 
   create() {
@@ -170,32 +176,8 @@ export class OceanScene extends Phaser.Scene {
 
     this.createMobileButtons(width, height);
     this.drawZoneBackdrop();
-    this.loadFishTextures();
+    this.spawnFishWave(6);
     this.updateHud();
-  }
-
-  private loadFishTextures() {
-    const entries = Object.entries(FISH_SPRITES);
-    this.pendingLoads = 0;
-
-    for (const [key, dataUrl] of entries) {
-      if (!this.textures.exists(key)) {
-        this.pendingLoads++;
-        this.textures.once(`addtexture-${key}`, () => {
-          this.pendingLoads--;
-          if (this.pendingLoads <= 0) {
-            this.texturesReady = true;
-            this.spawnFishWave(6);
-          }
-        });
-        this.textures.addBase64(key, dataUrl);
-      }
-    }
-
-    if (this.pendingLoads === 0) {
-      this.texturesReady = true;
-      this.spawnFishWave(6);
-    }
   }
 
   private createMobileButtons(width: number, height: number) {
@@ -284,7 +266,6 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private spawnOneFish(initial = false) {
-    if (!this.texturesReady) return;
     const { width, height } = this.scale;
 
     if (this.fishList.length >= this.maxFishPerZone) {
@@ -304,9 +285,15 @@ export class OceanScene extends Phaser.Scene {
         : width + 45;
     const startY = Phaser.Math.Between(95, height - 75);
 
-    const sprite = this.add.image(startX, startY, spec.key);
-    sprite.setScale(spec.scale);
-    sprite.setFlipX(!fromLeft);
+    let sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse;
+    if (this.textures.exists(spec.key)) {
+      const img = this.add.image(startX, startY, spec.key);
+      img.setScale(spec.scale);
+      img.setFlipX(!fromLeft);
+      sprite = img;
+    } else {
+      sprite = this.add.ellipse(startX, startY, 64, 30, 0xfb923c);
+    }
     sprite.setDepth(5);
 
     const label = this.add
@@ -516,7 +503,9 @@ export class OceanScene extends Phaser.Scene {
           if (fish.hp <= 0) {
             fish.stunned = true;
             fish.stunTimer = 8;
-            fish.sprite.setTint(0x94a3b8);
+            if ('setTint' in fish.sprite) {
+              fish.sprite.setTint(0x94a3b8);
+            }
             fish.sprite.setAngle(180);
             fish.label.setText(`💫 ${fish.spec.name} (F 수집)`);
           }
@@ -537,7 +526,9 @@ export class OceanScene extends Phaser.Scene {
         if (fish.stunTimer <= 0) {
           fish.stunned = false;
           fish.hp = fish.spec.hp;
-          fish.sprite.clearTint();
+          if ('clearTint' in fish.sprite) {
+            fish.sprite.clearTint();
+          }
           fish.sprite.setAngle(0);
           fish.label.setText(fish.spec.name);
         }
@@ -548,10 +539,10 @@ export class OceanScene extends Phaser.Scene {
 
         if (fish.sprite.x < -50 && fish.vx < 0) {
           fish.vx = Math.abs(fish.vx);
-          fish.sprite.setFlipX(false);
+          if ('setFlipX' in fish.sprite) fish.sprite.setFlipX(false);
         } else if (fish.sprite.x > width + 50 && fish.vx > 0) {
           fish.vx = -Math.abs(fish.vx);
-          fish.sprite.setFlipX(true);
+          if ('setFlipX' in fish.sprite) fish.sprite.setFlipX(true);
         }
       }
       fish.label.setPosition(fish.sprite.x, fish.sprite.y - 34);
