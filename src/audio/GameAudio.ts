@@ -20,6 +20,7 @@ export class GameAudio {
   private zoneIndex = 0;
   private dragonBattle = false;
   private muted = false;
+  private paused = false;
   private readonly lastPlayed = new Map<string, number>();
 
   unlock() {
@@ -36,9 +37,20 @@ export class GameAudio {
       this.startMusic();
     }
 
+    if (this.paused) {
+      if (this.context.state === 'running') void this.context.suspend().catch(() => {});
+      return;
+    }
     if (this.context.state === 'suspended') {
       void this.context.resume();
     }
+  }
+
+  setPaused(paused: boolean) {
+    this.paused = paused;
+    if (!this.context || this.context.state === 'closed') return;
+    if (paused) void this.context.suspend().catch(() => {});
+    else this.unlock();
   }
 
   setZone(zoneIndex: number) {

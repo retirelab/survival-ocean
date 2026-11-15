@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
+import { PauseControls } from '../game/PauseControls';
+import { readSave, writeSave, type SaveGame } from '../game/SaveGame';
 
 const ROCK_BREAM_SPRITE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGkAAABACAMAAAAu/6n2AAAA/1BMVEWcnZtoZ2YkIyPh39xkYmBSUVFJTE7e7/eVlZM5NzYYGBk2MyiNnKV+kJkyN0BAQD6KfX2FhXzHpqbDw68+QEB/AABibYC+w8MAAADT5e0RGCx3h5C0xtCXqLKpu8XB091ZZ3Fse4TJ2+SJmqQtOEdMWWRkc3w5RFGCkpz+/v0EBhEkKTCis72+0NoUFhgwNTkbIzJ+fn5IU1tCTFVVVVSesLoFDCJgbnc2Nzg9PT1JSEdGRkYnKCgUFBQ3NzhWVlUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACJGlR7AAAAQHRSTlMmW50aJpbS/0hbzzD+/uPSFi0LFcEC/zMA//7+/v7+/v7+//7+/v7+/gb9+P7/+fn+Av78BP7+/tMEbrHVqLdxZhXjbgAACqFJREFUeNq1WAl727YSpA4fcZz0tX2HKBAkQFy8RFKkdVh27P//r94sIDlOYjdxmkK2PpESMdjd2dkFosV3R0n/Z10ZHbrpYv6Obq3L9eKtI/ruL24W0WQxHbvp1eCq6fkwKcvFz4zvIq0X5Xg/rZWpOs7aZTG29/uz2Sya39yWvxRpvZg97Oqac8bSgvFrZtradu1dF3lzfx1S+Z/yvuei2HClUm45LxheppPdp8fH2a+0ab24bG3DOF70x5gEksLoqrY+v1yTWevAjvX67yCtbxd71kgB51mmRMEM4/ZaSSaVNaxt6enbp1//deC+F6d3NbduEMIMxrjBjIOgDxaWMWmXV58mmOIwxfg0mYWEeDPSmsJ9+fjgzCissHrpB33ESzvn4EexXLaHw1jXXd+3bQ2sm7cjkU/OpnWrpZRFUSjZe6RRFXTl8FEbYSRz2llVKKBWbfVQLtZvtyma3LftctlLhJ8mD0Zp/1mxcDUKwwrOpGCKuNITVPkGJNAA6jPqMJtQnG/SNC28UT3DR84bVtOVYYgdqMIVOCOlqKu716FetOlfj/daMOGRDE+SVZ7Huai11r2K8zxbJQmj7xxju2EwBS9UIZEFtqvuftx70WI2ue+ERNbAqF5rFYfBAKRrFuf+itc9jFTIZDbAhUxYuI+xtr58zajoW5n7rR2AA5dxhNvR3DADVniH1U2CkeWNc7qu0yTdcNvDAbyQGyAtq+lLIn0LhkXfytzSyYJjwlVseyx8xMwITsI90lKlTZPiloC9jueJd2QN3sCTBRur6fqlqvONTXDdOQhWNE0Wx1kSIsXSBrM3qQlIDRjS8JS+60UCY2kJ9SgLqQSTy3byZVL5tDw7O7uJvrxbnlOg0wwUiLOVClxu/DghpXzDiX2e9ORJvyBjZGGlZEO1nz2LFD6V0cOyqqp30Zc1746oLVd5nJCHGk90x1PyXiY9EqjoLfSr0Bt8ytkWySAH+wHy4SqIYfkMaH5GJm+rj9GXrhOYW3OKTLPZNInYehNXngWqPyL5EZAaGOgZbwoxQCyYrdvPNoFek3ZprRi/sGm9+OOjIA+ZFITaUNgzINVLk+Q04sRTYoPIJIDmPq0bciR3+NHmw7mhktJXJ5vwHu17LZHTy6p9H3123Z93xquM5DTIe4l3mAkZFGfel0We+ZH4RcF2QLlam4YzMRohXLV/8lx0VYP/wpotxCN68mh5PnpZ6CE/SKaNh6IbH5NT7vqoHYFiuQ2MQAwN5BaQ0ggFpb33882pn3ICPLFiua3OTiwvb6OHHrWOfA93NEgn+s9Tmrw5IjU+NKuAlBOSyHwIGT0FKOYc+qeH8vYGSVXe9aIopIWsVVU9OyHdLB6XjHvBFgiSj3m6yoLH0iNSekRarU5IxoN6Skg8UBCdz32UysN0kOrDTqqd1UA6Ze56EdUO7Ui/3NasSdNArxS6ap4hJUQ+neFulq2C9whplfOeUgMP4NdVfRfNf590/UCqy1BPiA+Tch2Fsje/76TidotHBs/jFabjgKBceULyBfDIj5hIr2EfLMQStuIoTLgLjqJVAwonrAIm3f+5WIe27XJvoKkFCqw1jiFLE5ovLfILIjM/zp0ziKo7ITUDwWIAyRHSyqecZkz0VGwKFC5UEiN1heZwTd7DmzNYgHKGa3Q9rEnyQDdexA1qUnGcO+Yj1P10kYM+4SKHfBBSlidu20Hf8Y1IGlInu1NiW50HYYDr9oMFP03PXFW5hCVwvl95ZtMYnYI4mcFRKsbTRWxPSHFceO+BHG6rIZpK1zZPlbWokAU6w0faMERwXWekEKAjOp+qYkomcb5ahal5nIx6DBbmcTo6J+KLb5HgY7KJkAwWmTrHCGmHdgdZu/QlP1pEo4EGFwXnRiOASja0ajCcImXTbNQmwF5ccP2x10pdv4TEAtKS0WNuSAkJy5d1VX0MSPO2QwsASQG1pTNCgtsxaTktPdmpzDgRUM1/dY+kR5fZHJGegoacVkBa5aLjCFthdlmSKiZQ8yHuoWJFXUezZ15W8C33EcpRBr3DCp6LUaSJ6sGFHRoyDrNNFpC0Hk853S8V6lmWC9egE1AszZOUg3uGCn7t1T2qYZC0RZKTrpBkh5DkPokylsRicHqrkQVFcb1DVcXTYXqhtXhColjCe4NBVic+9eE96mSGbdUH73VgeMaF+JD41A9IWZz4JGosXE85QpVn5zMeCXLxhGROSJoEP8/UKGEM6TtPONsZgUcQqDtqbaPJft8OPEttsQEPjkirgJQzHrPeFA21qNLSG5BOkvHcJkJCHyjRHaa8KD4ovzux1N6aKtSRqCxn767aYZNfMHWRhwickDjL4MZ00xS+mWO0RCcu8hOSO6lHAyRyGzNiN3Q1tgTo2SWoB/+5bRDdCPf3+DdNIhm5zYcJKYFJchu6ypRfc+WNslKYUzoR0inRODIBQFyOXTV9jzGBbNG+Bx0q09Vy4pHQ3FEAQcnkWE4zWMLgI26PM1ErhC0HmaXTr5HIGKYFgBQ2BEq0E181Zuc1yCMs8bzao+JHB20V1DvOCkalD1QltjYF/M6Up/xFnFIBsKTOYkg+657e5b5LRx+mixwW7UgC2vvS589s2hpmhfBVY05aftiPO/RZAKFtRKhMXIGJimU5oBJqvjEF/OB6zU5AcePQsgcXoK1WSCIa9ljdqS+6q2sEy+z6qjqU1EeUZ/tOCI+xUQpagX06Om/s1ElqoRPYBhjoytjXDv3xcdCOgHSBaq7CfdquYUF8rCZhu+aTte2sREmp6jLU3Pmh7gz3PUpDG/PNCnknQdhkRaqepn67qVH90R6HPmKVs9pQYJGiCdMDtnOMEtW0bfm5C5s/1u0gILL3vrqX771dbmCKmtWGEFMGI6lzTUjNUO2od4iLXjyRBmWR5cfNgdUOvQnlAAR1Hz3rLDFx1estad9Tvxc9ntXOfijQuqIok+iS5npdOZqRZRLOOwElwqWJb6MJyaMgKOiW51/uAMrJHm0MZOJ5Xz6fokHzQ6rQXaZhzdRX0OSDDECQSLDApAGo4cZQVvNrYcQLu5ro5vHq6vEzUkm79eisqx26p4Ifx4aWnB7RuDs15bhWxvsaOEqQFIDf4Kf7dqd2+8qecDJ5uHLwRaE+g6WnvZr0oMEUJf1NtG5CoE+FHuzQsLb1/147KIi+2hLCuD8O005bROoJzO8CyU/JqROkzQi4g3ywYgeFx8/hP0SpK390n3vjwQ4HXyDVE5YP2vPhb6HSIUTYS1hJBVZAtievnma+dvIRRfAiufGZH78a6KZAICBIzzvor67qaPE2pFtP1MN0D9N2ghT5azjIdNc9TLtB2qobuxGyKLrq/nWgV23yB1SL3yeTf3et5CaQ3wx+GLy6+m4yiRZ3dQeotq3rFu/oVW9+6tTNPzUrDy1Ku0UswOF2+smPd+UsbCnKyXTsL8vZFF88/tUB1fdOEm8I7VBvmN83sDEUn+NCjus/TH7N2TK4NKsHFEqyinW/RT4Vb9bro01kxU0g3M3fOrP0hkXtLgm6piFrL9PnF5zM+1+1grNrdHq76t3Pncv/INJ8cYmuANpmZN3+o0jh6JdOJm3/TyMh4vM7PRbcvRCoX2wTHWXeDQNr9/84EhH5/VR3P2vT/wHMCgk8z33D9AAAAABJRU5ErkJggg==';
@@ -256,6 +258,9 @@ export class OceanScene extends Phaser.Scene {
     attack: 0,
   };
 
+  private pauseControls?: PauseControls;
+  private savedGame = readSave();
+
   private spawnTimer = 0;
   private shootCooldown = 0;
 
@@ -413,6 +418,24 @@ export class OceanScene extends Phaser.Scene {
       .setDepth(32)
       .setVisible(false);
 
+    this.pauseControls = new PauseControls({
+      pause: () => {
+        this.resetHeldInput();
+        this.audio.setPaused(true);
+        this.scene.pause();
+      },
+      resume: () => {
+        this.resetHeldInput();
+        this.audio.setPaused(false);
+        this.scene.resume();
+      },
+      save: () => {
+        const data = this.captureSave();
+        const saved = writeSave(data);
+        if (saved) this.savedGame = { data, error: null };
+        return saved;
+      },
+    });
     this.createControls();
     this.setupMultiTouchInput();
     this.layoutUI(width, height);
@@ -421,17 +444,102 @@ export class OceanScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown', unlockAudio);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.keyboard?.off('keydown', unlockAudio);
+      this.pauseControls?.destroy();
+      this.scale.off('resize', onResize);
       this.audio.destroy();
     });
 
-    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+    const onResize = (gameSize: Phaser.Structs.Size) => {
       this.layoutUI(gameSize.width, gameSize.height);
-    });
+    };
+    this.scale.on('resize', onResize);
 
     if (this.zoneIndex === DRAGON_ZONE_INDEX) this.ensureDragonVisual();
     else this.spawnFishWave(6);
     this.updateHud();
     this.showStartMenu();
+  }
+
+  private resetHeldInput() {
+    this.joyPointerId = null;
+    this.joyVec = { x: 0, y: 0 };
+    this.shootPointerId = null;
+    this.shootHolding = false;
+    this.joyThumb?.setPosition(this.joyCenter.x, this.joyCenter.y);
+    this.shootBtnBg?.setScale(1);
+    this.input.keyboard?.resetKeys();
+    this.setAiming(false);
+  }
+
+  private captureSave(): SaveGame {
+    const { width, height } = this.scale;
+    return {
+      version: 1, savedAt: Date.now(), zoneIndex: this.zoneIndex, level: this.level,
+      player: { x: this.player.x / width, y: this.player.y / height, facing: this.facing, hp: this.playerHp },
+      bag: [...this.bag], dragonLoot: [...this.dragonLoot], minerals: { ...this.mineralInventory },
+      upgrades: { ...this.upgradeRanks }, completedStages: [...this.completedUpgradeStages],
+      stats: {
+        attack: this.attackMultiplier, defense: this.defenseMultiplier, rapid: this.rapidFireMultiplier,
+        bulletSpeed: this.bulletSpeedMultiplier, autoFire: this.autoFireEnabled,
+        regenAmount: this.regenAmount, regenInterval: this.regenInterval, regenTimer: this.regenTimer,
+      },
+      dragon: { state: this.dragonState, hp: this.dragonHp, harvests: this.dragonHarvests,
+        respawn: this.dragonRespawnRemaining, cooldown: this.dragonAttackCooldown },
+      ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
+      menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
+        nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
+        spawnY: (this.pendingZoneTransition?.spawnY ?? 56) / height },
+    };
+  }
+
+  private restoreSave(save: SaveGame) {
+    this.resetHeldInput();
+    this.destroyMenu();
+    this.menuMode = null;
+    this.level = save.level;
+    this.playerHp = save.player.hp;
+    this.bag = [...save.bag];
+    this.dragonLoot = [...save.dragonLoot];
+    for (const mineral of MINERAL_TABLE) this.mineralInventory[mineral.name] = save.minerals[mineral.name];
+    this.upgradeRanks = { ...save.upgrades };
+    this.completedUpgradeStages = new Set(save.completedStages);
+    const stats = save.stats;
+    this.attackMultiplier = stats.attack;
+    this.defenseMultiplier = stats.defense;
+    this.rapidFireMultiplier = stats.rapid;
+    this.bulletSpeedMultiplier = stats.bulletSpeed;
+    this.autoFireEnabled = stats.autoFire;
+    this.regenAmount = stats.regenAmount;
+    this.regenInterval = stats.regenInterval;
+    this.regenTimer = stats.regenTimer;
+    this.dragonState = save.dragon.state as DragonState;
+    this.dragonHp = save.dragon.hp;
+    this.dragonHarvests = save.dragon.harvests;
+    this.dragonRespawnRemaining = save.dragon.respawn;
+    // Telegraphs and bullets are transient. Give the player time to react after loading.
+    this.clearDragonDanger();
+    this.dragonAttackCooldown = Math.max(3, save.dragon.cooldown);
+    if (this.dragonState === 'dead' && this.dragonHarvests >= 3) {
+      this.dragonState = 'respawning';
+      this.dragonRespawnRemaining = DRAGON_RESPAWN_SECONDS;
+    }
+    this.oreNodes = save.ores.map(ore => ({ id: ore.id as OreNode['id'], x: 0, y: 0,
+      remaining: ore.remaining, respawnRemaining: ore.respawn }));
+    const { width, height } = this.scale;
+    this.changeZone(save.zoneIndex, Phaser.Math.Clamp(save.player.y * height, 28, height - 28), false);
+    this.player.x = Phaser.Math.Clamp(save.player.x * width, 24, width - 24);
+    this.facing = save.player.facing;
+    this.player.scaleX = this.facing;
+    this.aimDirection = { x: this.facing, y: 0 };
+    this.playerInvuln = 2;
+    this.pauseControls?.setActive(true);
+    if (save.menu.upgrading) {
+      this.showUpgradeMenu(save.menu.stage, save.menu.nextZone === null ? undefined : {
+        zoneIndex: save.menu.nextZone, spawnY: save.menu.spawnY * height,
+      });
+    }
+    this.showNotice('저장한 모험을 이어합니다! 물고기는 다시 배치되고 2초간 보호됩니다.');
+    this.updateHud();
   }
 
   private createControls() {
@@ -693,6 +801,8 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private showUpgradeMenu(stage: number, pendingZone?: { zoneIndex: number; spawnY: number }) {
+    this.pauseControls?.setActive(true);
+    this.resetHeldInput();
     this.menuMode = 'upgrade';
     this.menuInputLockedUntil = this.time.now + 250;
     this.menuStage = Phaser.Math.Clamp(stage, 0, 3);
@@ -708,8 +818,9 @@ export class OceanScene extends Phaser.Scene {
     this.addMenuObject(overlay);
 
     if (this.menuMode === 'start') {
+      const compact = height < 520;
       const title = this.add
-        .text(width / 2, height * 0.28, '🌊 서바이벌오션', {
+        .text(width / 2, height * (compact ? 0.16 : 0.28), '🌊 서바이벌오션', {
           fontSize: `${Math.max(30, Math.min(54, width * 0.085))}px`,
           color: '#7dd3fc',
           fontStyle: 'bold',
@@ -720,7 +831,7 @@ export class OceanScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(101);
       const subtitle = this.add
-        .text(width / 2, height * 0.39, '바다를 탐험하고 물고기를 수집하세요!\n구역마다 한 번씩 새로운 강화를 고를 수 있습니다.', {
+        .text(width / 2, height * (compact ? 0.30 : 0.39), '바다를 탐험하고 물고기를 수집하세요!\n구역마다 한 번씩 새로운 강화를 고를 수 있습니다.', {
           fontSize: `${Math.max(14, Math.min(21, width * 0.034))}px`,
           color: '#e0f2fe',
           align: 'center',
@@ -730,13 +841,14 @@ export class OceanScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(101);
       const buttonWidth = Math.min(360, width - 54);
-      const buttonY = height * 0.59;
+      const saved = this.savedGame.data;
+      const buttonY = height * (saved ? (compact ? 0.77 : 0.71) : 0.59);
       const button = this.add
-        .rectangle(width / 2, buttonY, buttonWidth, 74, 0x0284c7, 1)
+        .rectangle(width / 2, buttonY, buttonWidth, compact ? 52 : 74, 0x0284c7, 1)
         .setStrokeStyle(4, 0x7dd3fc, 1)
         .setDepth(101);
       const buttonText = this.add
-        .text(width / 2, buttonY, '서바이벌오션 시작하기', {
+        .text(width / 2, buttonY, saved ? '새 게임 시작' : '서바이벌오션 시작하기', {
           fontSize: `${Math.max(18, Math.min(25, width * 0.045))}px`,
           color: '#ffffff',
           fontStyle: 'bold',
@@ -744,11 +856,31 @@ export class OceanScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(102);
       const hint = this.add
-        .text(width / 2, buttonY + 62, '버튼 터치 또는 Enter', { fontSize: '13px', color: '#94a3b8' })
+        .text(width / 2, buttonY + (compact ? 45 : 62), saved ? '새 게임은 다음 저장 시 기존 저장을 덮어씁니다' : '버튼 터치 또는 Enter', { fontSize: '12px', color: '#94a3b8', wordWrap: { width: buttonWidth }, align: 'center' })
         .setOrigin(0.5)
         .setDepth(101);
       this.menuObjects.push(title, subtitle, button, buttonText, hint);
       this.menuTargets.push({ bounds: button.getBounds(), action: () => this.showUpgradeMenu(0) });
+      if (saved) {
+        const continueY = height * (compact ? 0.49 : 0.53);
+        const continueButton = this.add.rectangle(width / 2, continueY, buttonWidth, compact ? 52 : 64, 0x0f766e)
+          .setStrokeStyle(3, 0x5eead4).setDepth(101);
+        const continueText = this.add.text(width / 2, continueY, `▶ 이어하기 · Lv.${saved.level}`, {
+          fontSize: '21px', color: '#ffffff', fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(102);
+        const savedText = this.add.text(width / 2, continueY + (compact ? 42 : 46),
+          `${ZONES[saved.zoneIndex].name} · ${new Date(saved.savedAt).toLocaleString('ko-KR')}`, {
+            fontSize: '12px', color: '#a7f3d0', wordWrap: { width: buttonWidth }, align: 'center',
+          }).setOrigin(0.5).setDepth(101);
+        this.menuObjects.push(continueButton, continueText, savedText);
+        this.menuTargets.unshift({ bounds: continueButton.getBounds(), action: () => this.restoreSave(saved) });
+      }
+      if (this.savedGame.error) {
+        const error = this.add.text(width / 2, height * 0.83, this.savedGame.error, {
+          fontSize: '13px', color: '#fca5a5', wordWrap: { width: buttonWidth }, align: 'center',
+        }).setOrigin(0.5).setDepth(101);
+        this.menuObjects.push(error);
+      }
       return;
     }
 
@@ -903,7 +1035,8 @@ export class OceanScene extends Phaser.Scene {
   private updateMenuKeyboard() {
     if (!this.menuMode) return;
     if (this.menuMode === 'start' && this.keyEnter && Phaser.Input.Keyboard.JustDown(this.keyEnter)) {
-      this.showUpgradeMenu(0);
+      if (this.savedGame.data) this.restoreSave(this.savedGame.data);
+      else this.showUpgradeMenu(0);
       return;
     }
     if (this.menuMode === 'upgrade') {
@@ -1308,7 +1441,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private tryHarvestDragon() {
-    if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState !== 'dead' || !this.dragonSprite) return;
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState !== 'dead' || this.dragonHarvests >= 3 || !this.dragonSprite) return;
     const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.dragonSprite.x, this.dragonSprite.y);
     if (distance > Math.max(150, this.dragonSprite.displayWidth * 0.42)) {
       this.audio.playDenied();
