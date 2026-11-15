@@ -55,9 +55,11 @@ type MenuMode = 'start' | 'upgrade' | null;
 
 interface DragonDangerZone {
   type: DragonAttack;
-  shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle;
+  shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle | Phaser.Geom.Polygon;
   damage: number;
   timer: number;
+  targetX: number;
+  targetY: number;
 }
 
 const ZONES: ZoneConfig[] = [
@@ -101,6 +103,7 @@ const DEEP_FISH: FishSpec[] = [
 
 const DRAGON_ZONE_INDEX = 3;
 const DRAGON_MAX_HP = 1250;
+const DRAGON_ATTACK_DAMAGE = 50;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
 const UPGRADE_TITLES = [
   { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
@@ -190,6 +193,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonHarvests = 0;
   private dragonRespawnRemaining = 0;
   private dragonAttackCooldown = 3;
+  private lastDragonAttack?: DragonAttack;
   private dragonSprite?: Phaser.GameObjects.Image;
   private dragonStatusText?: Phaser.GameObjects.Text;
   private dragonRespawnText?: Phaser.GameObjects.Text;
@@ -933,6 +937,10 @@ export class OceanScene extends Phaser.Scene {
   private defeatDragon() {
     this.dragonState = 'dead';
     this.dragonHarvests = 0;
+    if (this.dragonSprite) {
+      this.tweens.killTweensOf(this.dragonSprite);
+      this.dragonSprite.setAngle(0);
+    }
     this.clearDragonDanger();
     this.audio.playStun();
     this.applyDragonAppearance();
@@ -942,27 +950,83 @@ export class OceanScene extends Phaser.Scene {
   private startDragonAttack() {
     if (this.dragonState !== 'awake' || !this.dragonSprite || this.zoneIndex !== DRAGON_ZONE_INDEX) return;
     const { width, height } = this.scale;
-    const attack = Phaser.Utils.Array.GetRandom<DragonAttack>(['breath', 'arm', 'tail']);
-    let shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle;
-    let damage: number;
+    const attacks: DragonAttack[] = ['breath', 'arm', 'tail'];
+    const availableAttacks = attacks.filter((candidate) => candidate !== this.lastDragonAttack);
+    const attack = Phaser.Utils.Array.GetRandom<DragonAttack>(availableAttacks);
+    this.lastDragonAttack = attack;
+    const targetX = Phaser.Math.Clamp(this.player.x, 28, width - 28);
+    const targetY = Phaser.Math.Clamp(this.player.y, 90, height - 35);
+    let shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle | Phaser.Geom.Polygon;
+
+    const headDirection = targetX < this.dragonSprite.x ? -1 : 1;
+    this.dragonSprite.setFlipX(headDirection < 0);
 
     if (attack === 'breath') {
-      shape = new Phaser.Geom.Rectangle(0, this.dragonSprite.y - 62, width, 124);
-      damage = 35;
-      this.dragonDangerText.setPosition(width / 2, this.dragonSprite.y);
+      const mouthX = this.dragonSprite.x + headDirection * this.dragonSprite.displayWidth * 0.28;
+      const mouthY = this.dragonSprite.y - this.dragonSprite.displayHeight * 0.12;
+      shape = this.createDragonBeam(mouthX, mouthY, targetX, targetY, Math.hypot(width, height) * 1.25, 105);
+      const angle = Phaser.Math.RadToDeg(Math.atan2(targetY - mouthY, targetX - mouthX));
+      const visualAngle = headDirection < 0 ? angle - 180 : angle;
+      this.tweens.add({
+        targets: this.dragonSprite,
+        angle: Phaser.Math.Clamp(visualAngle * 0.12, -9, 9),
+        duration: 180,
+        ease: 'Sine.easeOut',
+      });
+      this.dragonDangerText.setPosition((mouthX + targetX) / 2, (mouthY + targetY) / 2);
     } else if (attack === 'arm') {
-      shape = new Phaser.Geom.Circle(this.dragonSprite.x + this.dragonSprite.displayWidth * 0.2, this.dragonSprite.y + 35, Math.min(130, width * 0.27));
-      damage = 25;
+      shape = new Phaser.Geom.Circle(targetX, targetY, Math.min(105, width * 0.22));
       this.dragonDangerText.setPosition(shape.x, shape.y);
+      this.tweens.add({
+        targets: this.dragonSprite,
+        y: this.dragonSprite.y - 12,
+        duration: 150,
+        yoyo: true,
+        repeat: 1,
+        ease: 'Sine.easeInOut',
+      });
     } else {
-      shape = new Phaser.Geom.Circle(this.dragonSprite.x - this.dragonSprite.displayWidth * 0.3, this.dragonSprite.y + 45, Math.min(145, width * 0.3));
-      damage = 30;
+      shape = new Phaser.Geom.Circle(targetX, targetY, Math.min(125, width * 0.26));
       this.dragonDangerText.setPosition(shape.x, shape.y);
+      const twitchAngle = headDirection < 0 ? -6 : 6;
+      this.tweens.add({
+        targets: this.dragonSprite,
+        angle: twitchAngle,
+        duration: 105,
+        yoyo: true,
+        repeat: 2,
+        ease: 'Sine.easeInOut',
+      });
     }
 
-    this.dragonDanger = { type: attack, shape, damage, timer: 1.15 };
+    this.dragonDanger = { type: attack, shape, damage: DRAGON_ATTACK_DAMAGE, timer: 1.15, targetX, targetY };
     this.drawDragonDanger();
     this.dragonDangerText.setVisible(true);
+  }
+
+  private createDragonBeam(
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number,
+    length: number,
+    beamWidth: number
+  ): Phaser.Geom.Polygon {
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const distance = Math.hypot(dx, dy) || 1;
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const px = -uy * (beamWidth / 2);
+    const py = ux * (beamWidth / 2);
+    const endX = startX + ux * length;
+    const endY = startY + uy * length;
+    return new Phaser.Geom.Polygon([
+      new Phaser.Geom.Point(startX + px, startY + py),
+      new Phaser.Geom.Point(endX + px, endY + py),
+      new Phaser.Geom.Point(endX - px, endY - py),
+      new Phaser.Geom.Point(startX - px, startY - py),
+    ]);
   }
 
   private drawDragonDanger() {
@@ -973,27 +1037,90 @@ export class OceanScene extends Phaser.Scene {
     const shape = this.dragonDanger.shape;
     if (shape instanceof Phaser.Geom.Rectangle) {
       this.dragonDangerGraphics.fillRectShape(shape).strokeRectShape(shape);
-    } else {
+    } else if (shape instanceof Phaser.Geom.Circle) {
       this.dragonDangerGraphics.fillCircleShape(shape).strokeCircleShape(shape);
+    } else {
+      this.dragonDangerGraphics.fillPoints(shape.points, true).strokePoints(shape.points, true);
     }
   }
 
   private executeDragonAttack() {
     if (!this.dragonDanger) return;
-    const { type, shape, damage } = this.dragonDanger;
-    const hit = shape.contains(this.player.x, this.player.y);
+    const { type, shape, damage, targetX, targetY } = this.dragonDanger;
+    const hit =
+      shape instanceof Phaser.Geom.Rectangle
+        ? Phaser.Geom.Rectangle.Contains(shape, this.player.x, this.player.y)
+        : shape instanceof Phaser.Geom.Circle
+          ? Phaser.Geom.Circle.Contains(shape, this.player.x, this.player.y)
+          : Phaser.Geom.Polygon.Contains(shape, this.player.x, this.player.y);
     const color = type === 'breath' ? 0x38bdf8 : 0xf97316;
     const effect = this.add.graphics().setDepth(8);
     effect.fillStyle(color, 0.72);
     if (shape instanceof Phaser.Geom.Rectangle) effect.fillRectShape(shape);
-    else effect.fillCircleShape(shape);
+    else if (shape instanceof Phaser.Geom.Circle) effect.fillCircleShape(shape);
+    else effect.fillPoints(shape.points, true);
     this.tweens.add({ targets: effect, alpha: 0, duration: 360, onComplete: () => effect.destroy() });
+
+    if (type === 'arm') this.playDragonArmSlam(targetX, targetY);
+    else if (type === 'tail') this.playDragonTailSwing(targetX, targetY);
+    else if (this.dragonSprite) {
+      this.tweens.add({
+        targets: this.dragonSprite,
+        x: this.dragonSprite.x + (this.dragonSprite.flipX ? 8 : -8),
+        duration: 90,
+        yoyo: true,
+        onComplete: () => this.dragonSprite?.setAngle(0),
+      });
+    }
     if (hit) {
       const attackName = type === 'breath' ? '푸른 빛의 브레스' : type === 'arm' ? '팔 휘두르기' : '꼬리 휘두르기';
       this.damagePlayer(damage, `수룡의 ${attackName}`);
     }
     this.clearDragonDanger();
-    this.dragonAttackCooldown = Phaser.Math.FloatBetween(3.6, 5.6);
+    this.dragonAttackCooldown = 0;
+  }
+
+  private playDragonArmSlam(targetX: number, targetY: number) {
+    const arm = this.add
+      .rectangle(targetX, targetY - 145, 34, 150, 0xf97316, 0.88)
+      .setOrigin(0.5, 1)
+      .setStrokeStyle(4, 0xfed7aa, 0.95)
+      .setDepth(9);
+    const claw = this.add.circle(targetX, targetY - 145, 28, 0xfb923c, 0.9).setDepth(9);
+    this.tweens.add({
+      targets: [arm, claw],
+      y: targetY + 18,
+      duration: 180,
+      ease: 'Cubic.easeIn',
+      onComplete: () => {
+        arm.destroy();
+        claw.destroy();
+        this.dragonSprite?.setAngle(0);
+      },
+    });
+  }
+
+  private playDragonTailSwing(targetX: number, targetY: number) {
+    if (!this.dragonSprite) return;
+    const direction = this.dragonSprite.flipX ? 1 : -1;
+    const tailX = this.dragonSprite.x + direction * this.dragonSprite.displayWidth * 0.32;
+    const tailY = this.dragonSprite.y + this.dragonSprite.displayHeight * 0.05;
+    const curve = new Phaser.Curves.QuadraticBezier(
+      new Phaser.Math.Vector2(tailX, tailY),
+      new Phaser.Math.Vector2((tailX + targetX) / 2, Math.min(tailY, targetY) - 110),
+      new Phaser.Math.Vector2(targetX, targetY)
+    );
+    const tailEffect = this.add.graphics().setDepth(9);
+    tailEffect.lineStyle(26, 0x0f766e, 0.9).strokePoints(curve.getPoints(28), false);
+    tailEffect.lineStyle(5, 0x5eead4, 0.95).strokePoints(curve.getPoints(28), false);
+    this.tweens.add({ targets: tailEffect, alpha: 0, duration: 320, onComplete: () => tailEffect.destroy() });
+    this.tweens.add({
+      targets: this.dragonSprite,
+      angle: this.dragonSprite.flipX ? 12 : -12,
+      duration: 110,
+      yoyo: true,
+      onComplete: () => this.dragonSprite?.setAngle(0),
+    });
   }
 
   private clearDragonDanger() {
@@ -1256,7 +1383,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.textures.exists(spec.key)) {
       const img = this.add.image(startX, startY, spec.key);
       img.setScale(spec.scale);
-      img.setFlipX(!fromLeft);
+      this.setFishFacing(img, spec, fromLeft);
       sprite = img;
     } else {
       sprite = this.add.ellipse(startX, startY, 56, 26, 0xfb923c);
@@ -1286,6 +1413,12 @@ export class OceanScene extends Phaser.Scene {
       baseY: startY,
       phase: Math.random() * Math.PI * 2,
     });
+  }
+
+  private setFishFacing(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse, spec: FishSpec, movingRight: boolean) {
+    if (!('setFlipX' in sprite)) return;
+    const artworkFacesLeft = spec.key === 'red_seabream' || spec.key === 'rock_bream';
+    sprite.setFlipX(artworkFacesLeft ? movingRight : !movingRight);
   }
 
   private fireBullet() {
@@ -1608,9 +1741,7 @@ export class OceanScene extends Phaser.Scene {
         const chaseSpeed = fish.spec.speed * 1.15;
         fish.sprite.x += (dx / dist) * chaseSpeed * dt;
         fish.sprite.y += (dy / dist) * chaseSpeed * dt;
-        if ('setFlipX' in fish.sprite) {
-          fish.sprite.setFlipX(dx < 0);
-        }
+        this.setFishFacing(fish.sprite, fish.spec, dx > 0);
         if (dist < 34) {
           this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name);
         }
@@ -1628,10 +1759,10 @@ export class OceanScene extends Phaser.Scene {
 
         if (fish.sprite.x < -50 && fish.vx < 0) {
           fish.vx = Math.abs(fish.vx);
-          if ('setFlipX' in fish.sprite) fish.sprite.setFlipX(false);
+          this.setFishFacing(fish.sprite, fish.spec, true);
         } else if (fish.sprite.x > width + 50 && fish.vx > 0) {
           fish.vx = -Math.abs(fish.vx);
-          if ('setFlipX' in fish.sprite) fish.sprite.setFlipX(true);
+          this.setFishFacing(fish.sprite, fish.spec, false);
         }
       }
       fish.label.setPosition(fish.sprite.x, fish.sprite.y - 30);
