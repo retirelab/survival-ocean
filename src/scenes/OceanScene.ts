@@ -48,6 +48,16 @@ interface BulletEntity {
   life: number;
 }
 
+type DragonState = 'sleeping' | 'awake' | 'dead' | 'respawning';
+type DragonAttack = 'breath' | 'arm' | 'tail';
+
+interface DragonDangerZone {
+  type: DragonAttack;
+  shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle;
+  damage: number;
+  timer: number;
+}
+
 const ZONES: ZoneConfig[] = [
   { id: 0, name: '초심층', minDepth: 0, maxDepth: 100, reqLevel: 1, topColor: 0x38bdf8, bottomColor: 0x0369a1, floorColor: 0x1e3a8a },
   { id: 1, name: '중심층', minDepth: 100, maxDepth: 200, reqLevel: 5, topColor: 0x0284c7, bottomColor: 0x1e3a8a, floorColor: 0x312e81 },
@@ -88,6 +98,9 @@ const DEEP_FISH: FishSpec[] = [
 ];
 
 const DOUBLE_BAG_FISH_KEYS = new Set(['shark', 'marlin', 'sailfish', 'grouper', 'tuna']);
+const DRAGON_ZONE_INDEX = 3;
+const DRAGON_MAX_HP = 1250;
+const DRAGON_RESPAWN_SECONDS = 5 * 60;
 
 export class OceanScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Container;
@@ -109,6 +122,7 @@ export class OceanScene extends Phaser.Scene {
   private keyF!: Phaser.Input.Keyboard.Key;
   private keyT!: Phaser.Input.Keyboard.Key;
   private keyM!: Phaser.Input.Keyboard.Key;
+  private keyG!: Phaser.Input.Keyboard.Key;
 
   private readonly audio = new GameAudio();
 
@@ -150,6 +164,24 @@ export class OceanScene extends Phaser.Scene {
   private tankBtnBg!: Phaser.GameObjects.Arc;
   private tankBtnText!: Phaser.GameObjects.Text;
 
+  private harvestBtnBg!: Phaser.GameObjects.Rectangle;
+  private harvestBtnText!: Phaser.GameObjects.Text;
+
+  private dragonState: DragonState = 'sleeping';
+  private dragonHp = DRAGON_MAX_HP;
+  private dragonHarvests = 0;
+  private dragonRespawnRemaining = 0;
+  private dragonAttackCooldown = 3;
+  private dragonSprite?: Phaser.GameObjects.Image;
+  private dragonStatusText?: Phaser.GameObjects.Text;
+  private dragonRespawnText?: Phaser.GameObjects.Text;
+  private dragonDanger?: DragonDangerZone;
+  private dragonDangerGraphics!: Phaser.GameObjects.Graphics;
+  private dragonDangerText!: Phaser.GameObjects.Text;
+  private dragonBossBar!: Phaser.GameObjects.Graphics;
+  private dragonBossText!: Phaser.GameObjects.Text;
+  private dragonLoot: string[] = [];
+
   private spawnTimer = 0;
   private shootCooldown = 0;
 
@@ -167,6 +199,10 @@ export class OceanScene extends Phaser.Scene {
     if (!this.textures.exists('rock_bream')) {
       this.load.image('rock_bream', ROCK_BREAM_SPRITE);
     }
+    const assetBase = 'assets/boss';
+    this.load.image('water_dragon_boss', `${assetBase}/water-dragon-boss.png`);
+    this.load.image('water_dragon_skull', `${assetBase}/water-dragon-skull.png`);
+    this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
   }
 
   create() {
@@ -207,6 +243,7 @@ export class OceanScene extends Phaser.Scene {
       this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
       this.keyT = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
       this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
+      this.keyG = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G);
     }
 
     this.hudText = this.add
@@ -242,6 +279,25 @@ export class OceanScene extends Phaser.Scene {
       .setDepth(40)
       .setVisible(false);
 
+    this.dragonDangerGraphics = this.add.graphics().setDepth(7);
+    this.dragonDangerText = this.add
+      .text(0, 0, '⚠️ ! 위험', {
+        fontSize: '24px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(220, 38, 38, 0.9)',
+        padding: { x: 10, y: 5 },
+      })
+      .setOrigin(0.5)
+      .setDepth(9)
+      .setVisible(false);
+    this.dragonBossBar = this.add.graphics().setDepth(31);
+    this.dragonBossText = this.add
+      .text(width / 2, 84, '', { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' })
+      .setOrigin(0.5)
+      .setDepth(32)
+      .setVisible(false);
+
     this.createControls();
     this.setupMultiTouchInput();
     this.layoutUI(width, height);
@@ -257,7 +313,8 @@ export class OceanScene extends Phaser.Scene {
       this.layoutUI(gameSize.width, gameSize.height);
     });
 
-    this.spawnFishWave(6);
+    if (this.zoneIndex === DRAGON_ZONE_INDEX) this.ensureDragonVisual();
+    else this.spawnFishWave(6);
     this.updateHud();
   }
 
@@ -328,6 +385,21 @@ export class OceanScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(36);
+
+    this.harvestBtnBg = this.add
+      .rectangle(0, 0, 118, 46, 0x7f1d1d, 0.95)
+      .setStrokeStyle(3, 0xfca5a5, 1)
+      .setDepth(35)
+      .setVisible(false);
+    this.harvestBtnText = this.add
+      .text(0, 0, '🗡️ 갈무리 (G)', {
+        fontSize: '13px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(36)
+      .setVisible(false);
   }
 
   private setupMultiTouchInput() {
@@ -335,6 +407,16 @@ export class OceanScene extends Phaser.Scene {
       this.audio.unlock();
       const px = pointer.x;
       const py = pointer.y;
+
+      if (
+        this.harvestBtnBg.visible &&
+        Phaser.Geom.Rectangle.Contains(this.harvestBtnBg.getBounds(), px, py)
+      ) {
+        this.harvestBtnBg.setScale(0.94);
+        this.time.delayedCall(120, () => this.harvestBtnBg.setScale(1));
+        this.tryHarvestDragon();
+        return;
+      }
 
       // 1) 발사 버튼 체크
       if (Phaser.Math.Distance.Between(px, py, this.shootBtnBg.x, this.shootBtnBg.y) <= 48) {
@@ -444,11 +526,315 @@ export class OceanScene extends Phaser.Scene {
     this.tankBtnBg.setPosition(tankX, tankY);
     this.tankBtnText.setPosition(tankX, tankY);
 
+    const harvestX = width / 2;
+    const harvestY = height - 82;
+    this.harvestBtnBg.setPosition(harvestX, harvestY);
+    this.harvestBtnText.setPosition(harvestX, harvestY);
+
     this.noticeText.setPosition(width / 2, height - 170);
     this.noticeText.setWordWrapWidth(Math.max(260, width - 40));
 
     this.player.x = Phaser.Math.Clamp(this.player.x, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y, 24, height - 20);
+    this.layoutDragon();
+  }
+
+  private ensureDragonVisual() {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX) return;
+
+    if (this.dragonState === 'respawning') {
+      if (!this.dragonRespawnText) {
+        this.dragonRespawnText = this.add
+          .text(0, 0, '', {
+            fontSize: '20px',
+            color: '#bfdbfe',
+            fontStyle: 'bold',
+            backgroundColor: 'rgba(2, 12, 23, 0.82)',
+            padding: { x: 14, y: 9 },
+            align: 'center',
+          })
+          .setOrigin(0.5)
+          .setDepth(8);
+      }
+      this.dragonRespawnText.setVisible(true);
+      this.layoutDragon();
+      return;
+    }
+
+    if (!this.dragonSprite) {
+      this.dragonSprite = this.add.image(0, 0, 'water_dragon_boss').setDepth(5);
+      this.dragonStatusText = this.add
+        .text(0, 0, '', {
+          fontSize: '16px',
+          color: '#e0f2fe',
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(2, 12, 23, 0.72)',
+          padding: { x: 8, y: 5 },
+        })
+        .setOrigin(0.5)
+        .setDepth(8);
+    }
+    this.dragonSprite.setVisible(true);
+    this.dragonStatusText?.setVisible(true);
+    this.dragonRespawnText?.setVisible(false);
+    this.applyDragonAppearance();
+    this.layoutDragon();
+    this.refreshDragonUi();
+  }
+
+  private layoutDragon() {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX) return;
+    const { width, height } = this.scale;
+
+    if (this.dragonSprite?.visible) {
+      const source = this.dragonSprite.texture.getSourceImage() as HTMLImageElement;
+      const targetWidth = Math.min(width * 0.64, 620);
+      const targetHeight = Math.min(height * 0.58, 500);
+      const scale = Math.min(targetWidth / source.width, targetHeight / source.height);
+      this.dragonSprite.setScale(scale);
+      this.dragonSprite.setPosition(width * 0.64, height * 0.49);
+      this.dragonStatusText?.setPosition(this.dragonSprite.x, this.dragonSprite.y - this.dragonSprite.displayHeight * 0.48 - 18);
+    }
+
+    this.dragonRespawnText?.setPosition(width * 0.64, height * 0.49);
+    this.dragonBossText.setPosition(width / 2, 120);
+  }
+
+  private applyDragonAppearance() {
+    if (!this.dragonSprite || !this.dragonStatusText) return;
+    this.dragonSprite.clearTint();
+    this.dragonSprite.setAlpha(1);
+
+    if (this.dragonState === 'sleeping') {
+      this.dragonSprite.setTint(0x64748b).setAlpha(0.72);
+      this.dragonStatusText.setText('💤 잠든 수룡 · 총알을 맞히면 깨어납니다');
+    } else if (this.dragonState === 'awake') {
+      this.dragonStatusText.setText('🐉 수룡');
+    } else if (this.dragonState === 'dead') {
+      this.dragonSprite.setTintFill(0x7b8794).setAlpha(0.92);
+      this.dragonStatusText.setText(`☠️ 수룡의 사체 · 갈무리 ${this.dragonHarvests}/3`);
+    }
+  }
+
+  private wakeDragon() {
+    if (this.dragonState !== 'sleeping') return;
+    this.dragonState = 'awake';
+    this.dragonAttackCooldown = 2.5;
+    this.applyDragonAppearance();
+    this.showNotice('수룡이 깨어났습니다! 공격 전 붉은 위험 표시에서 벗어나세요!');
+  }
+
+  private damageDragon(amount: number) {
+    if (this.dragonState === 'sleeping') this.wakeDragon();
+    if (this.dragonState !== 'awake') return;
+    this.dragonHp = Math.max(0, this.dragonHp - amount);
+    this.audio.playHit();
+    if (this.dragonHp <= 0) this.defeatDragon();
+    this.refreshDragonUi();
+  }
+
+  private defeatDragon() {
+    this.dragonState = 'dead';
+    this.dragonHarvests = 0;
+    this.clearDragonDanger();
+    this.audio.playStun();
+    this.applyDragonAppearance();
+    this.showNotice('수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)');
+  }
+
+  private startDragonAttack() {
+    if (this.dragonState !== 'awake' || !this.dragonSprite || this.zoneIndex !== DRAGON_ZONE_INDEX) return;
+    const { width, height } = this.scale;
+    const attack = Phaser.Utils.Array.GetRandom<DragonAttack>(['breath', 'arm', 'tail']);
+    let shape: Phaser.Geom.Rectangle | Phaser.Geom.Circle;
+    let damage: number;
+
+    if (attack === 'breath') {
+      shape = new Phaser.Geom.Rectangle(0, this.dragonSprite.y - 62, width, 124);
+      damage = 35;
+      this.dragonDangerText.setPosition(width / 2, this.dragonSprite.y);
+    } else if (attack === 'arm') {
+      shape = new Phaser.Geom.Circle(this.dragonSprite.x + this.dragonSprite.displayWidth * 0.2, this.dragonSprite.y + 35, Math.min(130, width * 0.27));
+      damage = 25;
+      this.dragonDangerText.setPosition(shape.x, shape.y);
+    } else {
+      shape = new Phaser.Geom.Circle(this.dragonSprite.x - this.dragonSprite.displayWidth * 0.3, this.dragonSprite.y + 45, Math.min(145, width * 0.3));
+      damage = 30;
+      this.dragonDangerText.setPosition(shape.x, shape.y);
+    }
+
+    this.dragonDanger = { type: attack, shape, damage, timer: 1.15 };
+    this.drawDragonDanger();
+    this.dragonDangerText.setVisible(true);
+  }
+
+  private drawDragonDanger() {
+    this.dragonDangerGraphics.clear();
+    if (!this.dragonDanger) return;
+    this.dragonDangerGraphics.fillStyle(0xef4444, 0.34);
+    this.dragonDangerGraphics.lineStyle(4, 0xff1f1f, 0.95);
+    const shape = this.dragonDanger.shape;
+    if (shape instanceof Phaser.Geom.Rectangle) {
+      this.dragonDangerGraphics.fillRectShape(shape).strokeRectShape(shape);
+    } else {
+      this.dragonDangerGraphics.fillCircleShape(shape).strokeCircleShape(shape);
+    }
+  }
+
+  private executeDragonAttack() {
+    if (!this.dragonDanger) return;
+    const { type, shape, damage } = this.dragonDanger;
+    const hit = shape.contains(this.player.x, this.player.y);
+    const color = type === 'breath' ? 0x38bdf8 : 0xf97316;
+    const effect = this.add.graphics().setDepth(8);
+    effect.fillStyle(color, 0.72);
+    if (shape instanceof Phaser.Geom.Rectangle) effect.fillRectShape(shape);
+    else effect.fillCircleShape(shape);
+    this.tweens.add({ targets: effect, alpha: 0, duration: 360, onComplete: () => effect.destroy() });
+    if (hit) {
+      const attackName = type === 'breath' ? '푸른 빛의 브레스' : type === 'arm' ? '팔 휘두르기' : '꼬리 휘두르기';
+      this.damagePlayer(damage, `수룡의 ${attackName}`);
+    }
+    this.clearDragonDanger();
+    this.dragonAttackCooldown = Phaser.Math.FloatBetween(3.6, 5.6);
+  }
+
+  private clearDragonDanger() {
+    this.dragonDanger = undefined;
+    this.dragonDangerGraphics?.clear();
+    this.dragonDangerText?.setVisible(false);
+  }
+
+  private tryHarvestDragon() {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState !== 'dead' || !this.dragonSprite) return;
+    const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.dragonSprite.x, this.dragonSprite.y);
+    if (distance > Math.max(150, this.dragonSprite.displayWidth * 0.42)) {
+      this.audio.playDenied();
+      this.showNotice('수룡의 사체에 더 가까이 가야 갈무리할 수 있어요.');
+      return;
+    }
+
+    const rewards = ['수룡의 비늘', '수룡의 머리뼈', '수룡의 비늘'];
+    const reward = rewards[this.dragonHarvests];
+    this.dragonHarvests += 1;
+    this.dragonLoot.push(reward);
+    this.audio.playCollect();
+    this.showDragonLoot(reward);
+    this.applyDragonAppearance();
+    this.showNotice(`${reward} 획득! 갈무리 ${this.dragonHarvests}/3`);
+
+    if (this.dragonHarvests >= 3) {
+      this.time.delayedCall(450, () => this.beginDragonRespawn());
+    }
+    this.updateHud();
+  }
+
+  private showDragonLoot(reward: string) {
+    const key = reward === '수룡의 머리뼈' ? 'water_dragon_skull' : 'water_dragon_scales';
+    const icon = this.add.image(this.player.x, this.player.y - 45, key).setDepth(45);
+    const source = icon.texture.getSourceImage() as HTMLImageElement;
+    icon.setScale(Math.min(68 / source.width, 68 / source.height));
+    this.tweens.add({
+      targets: icon,
+      y: icon.y - 55,
+      alpha: 0,
+      duration: 1200,
+      ease: 'Cubic.easeOut',
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private beginDragonRespawn() {
+    this.dragonSprite?.destroy();
+    this.dragonStatusText?.destroy();
+    this.dragonSprite = undefined;
+    this.dragonStatusText = undefined;
+    this.dragonState = 'respawning';
+    this.dragonRespawnRemaining = DRAGON_RESPAWN_SECONDS;
+    this.harvestBtnBg.setVisible(false);
+    this.harvestBtnText.setVisible(false);
+    this.ensureDragonVisual();
+    this.showNotice('갈무리를 마쳤습니다. 수룡은 5분 뒤 이 자리에서 부활합니다.');
+  }
+
+  private updateDragon(dt: number) {
+    if (this.dragonState === 'respawning') {
+      this.dragonRespawnRemaining = Math.max(0, this.dragonRespawnRemaining - dt);
+      if (this.dragonRespawnRemaining <= 0) {
+        this.dragonState = 'sleeping';
+        this.dragonHp = DRAGON_MAX_HP;
+        this.dragonHarvests = 0;
+        this.dragonRespawnText?.destroy();
+        this.dragonRespawnText = undefined;
+        if (this.zoneIndex === DRAGON_ZONE_INDEX) {
+          this.ensureDragonVisual();
+          this.showNotice('수룡이 다시 부활해 잠들었습니다.');
+        }
+      } else if (this.zoneIndex === DRAGON_ZONE_INDEX) {
+        const seconds = Math.ceil(this.dragonRespawnRemaining);
+        const minutes = Math.floor(seconds / 60);
+        const remain = seconds % 60;
+        this.dragonRespawnText?.setText(`🐉 수룡 부활까지\n${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`);
+      }
+    }
+
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX) return;
+    if (this.dragonState === 'awake') {
+      if (this.dragonDanger) {
+        this.dragonDanger.timer -= dt;
+        this.dragonDangerText.setAlpha(0.65 + Math.sin(this.dragonDanger.timer * 24) * 0.35);
+        if (this.dragonDanger.timer <= 0) this.executeDragonAttack();
+      } else {
+        this.dragonAttackCooldown -= dt;
+        if (this.dragonAttackCooldown <= 0) this.startDragonAttack();
+      }
+    }
+
+    const closeEnough =
+      this.dragonState === 'dead' &&
+      !!this.dragonSprite &&
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.dragonSprite.x, this.dragonSprite.y) <=
+        Math.max(150, this.dragonSprite.displayWidth * 0.42);
+    this.harvestBtnBg.setVisible(closeEnough);
+    this.harvestBtnText.setVisible(closeEnough);
+    this.refreshDragonUi();
+  }
+
+  private refreshDragonUi() {
+    const showBar = this.zoneIndex === DRAGON_ZONE_INDEX && this.dragonState === 'awake';
+    this.dragonBossText.setVisible(showBar);
+    if (showBar) {
+      this.refreshDragonBossBar();
+    } else {
+      this.dragonBossBar.clear();
+    }
+  }
+
+  private refreshDragonBossBar() {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState !== 'awake') return;
+    this.dragonBossText.setVisible(true);
+    const width = this.scale.width;
+    const barWidth = Math.min(width - 48, 560);
+    const x = (width - barWidth) / 2;
+    const y = 94;
+    const ratio = Phaser.Math.Clamp(this.dragonHp / DRAGON_MAX_HP, 0, 1);
+    this.dragonBossBar.clear();
+    this.dragonBossBar.fillStyle(0x1f2937, 0.95).fillRoundedRect(x, y, barWidth, 18, 7);
+    this.dragonBossBar.fillStyle(0xdc2626, 1).fillRoundedRect(x + 3, y + 3, (barWidth - 6) * ratio, 12, 5);
+    this.dragonBossText.setText(`수룡  ${this.dragonHp}/${DRAGON_MAX_HP}`);
+  }
+
+  private setDragonZoneVisibility(visible: boolean) {
+    this.dragonSprite?.setVisible(visible);
+    this.dragonStatusText?.setVisible(visible);
+    this.dragonRespawnText?.setVisible(visible && this.dragonState === 'respawning');
+    if (!visible) {
+      this.clearDragonDanger();
+      this.dragonBossBar.clear();
+      this.dragonBossText.setVisible(false);
+      this.harvestBtnBg.setVisible(false);
+      this.harvestBtnText.setVisible(false);
+    }
   }
 
   private emptyBagToTank() {
@@ -532,10 +918,12 @@ export class OceanScene extends Phaser.Scene {
   private getPoolForCurrentZone(): FishSpec[] {
     if (this.zoneIndex === 0) return SHALLOW_FISH;
     if (this.zoneIndex === 1) return MID_FISH;
-    return DEEP_FISH;
+    if (this.zoneIndex === 2) return DEEP_FISH;
+    return [];
   }
 
   private spawnFishWave(count: number) {
+    if (this.zoneIndex === DRAGON_ZONE_INDEX) return;
     for (let i = 0; i < count; i++) {
       this.spawnOneFish(true);
     }
@@ -543,6 +931,7 @@ export class OceanScene extends Phaser.Scene {
 
   private spawnOneFish(initial = false) {
     const { width, height } = this.scale;
+    if (this.zoneIndex === DRAGON_ZONE_INDEX) return;
 
     if (this.fishList.length >= this.maxFishPerZone) {
       const oldest = this.fishList.shift();
@@ -682,6 +1071,7 @@ export class OceanScene extends Phaser.Scene {
 
   private changeZone(nextIndex: number, spawnY: number, playSound = true) {
     const previousZoneIndex = this.zoneIndex;
+    if (previousZoneIndex === DRAGON_ZONE_INDEX) this.setDragonZoneVisibility(false);
     for (const f of this.fishList) {
       f.sprite.destroy();
       f.label.destroy();
@@ -694,7 +1084,11 @@ export class OceanScene extends Phaser.Scene {
     }
     this.player.y = spawnY;
     this.drawZoneBackdrop();
-    this.spawnFishWave(6);
+    if (this.zoneIndex === DRAGON_ZONE_INDEX) {
+      this.ensureDragonVisual();
+    } else {
+      this.spawnFishWave(6);
+    }
     this.showNotice(`${ZONES[this.zoneIndex].name} (${ZONES[this.zoneIndex].minDepth}m~${ZONES[this.zoneIndex].maxDepth}m) 진입!`);
     this.updateHud();
   }
@@ -707,7 +1101,12 @@ export class OceanScene extends Phaser.Scene {
     this.hudText.setText(
       `🌊 ${zone.name}(${depth}m) | ⭐ Lv.${this.level}/${this.maxLevel} | ❤️ ${this.playerHp}/${this.maxHp}`
     );
-    this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | 물고기: ${this.fishList.length}/${this.maxFishPerZone}`);
+    const scaleCount = this.dragonLoot.filter((loot) => loot === '수룡의 비늘').length;
+    const skullCount = this.dragonLoot.filter((loot) => loot === '수룡의 머리뼈').length;
+    const lootSummary =
+      this.dragonLoot.length > 0 ? ` | 전리품: 비늘×${scaleCount} 머리뼈×${skullCount}` : '';
+    const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
+    this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
   }
 
   update(_time: number, delta: number) {
@@ -778,6 +1177,9 @@ export class OceanScene extends Phaser.Scene {
     if (this.keyT && Phaser.Input.Keyboard.JustDown(this.keyT)) {
       this.emptyBagToTank();
     }
+    if (this.keyG && Phaser.Input.Keyboard.JustDown(this.keyG)) {
+      this.tryHarvestDragon();
+    }
     if (this.keyM && Phaser.Input.Keyboard.JustDown(this.keyM)) {
       const muted = this.audio.toggleMute();
       this.showNotice(muted ? '🔇 사운드 꺼짐 (M)' : '🔊 사운드 켜짐 (M)');
@@ -802,10 +1204,12 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.spawnTimer += dt;
-    if (this.spawnTimer >= 2.2) {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX && this.spawnTimer >= 2.2) {
       this.spawnTimer = 0;
       this.spawnOneFish(false);
     }
+
+    this.updateDragon(dt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
@@ -814,7 +1218,17 @@ export class OceanScene extends Phaser.Scene {
       b.life -= dt;
 
       let hit = false;
+      if (
+        this.zoneIndex === DRAGON_ZONE_INDEX &&
+        this.dragonSprite?.visible &&
+        (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
+        this.dragonSprite.getBounds().contains(b.gfx.x, b.gfx.y)
+      ) {
+        this.damageDragon(this.bulletDamage);
+        hit = true;
+      }
       for (const fish of this.fishList) {
+        if (hit) break;
         if (fish.stunned) continue;
         if (Phaser.Math.Distance.Between(b.gfx.x, b.gfx.y, fish.sprite.x, fish.sprite.y) < 38) {
           fish.hp = Math.max(0, fish.hp - this.bulletDamage);
