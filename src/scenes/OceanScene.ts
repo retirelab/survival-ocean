@@ -50,6 +50,8 @@ interface BulletEntity {
 
 type DragonState = 'sleeping' | 'awake' | 'dead' | 'respawning';
 type DragonAttack = 'breath' | 'arm' | 'tail';
+type UpgradeChoice = 'rapid' | 'defense' | 'attack' | 'skip';
+type MenuMode = 'start' | 'upgrade' | null;
 
 interface DragonDangerZone {
   type: DragonAttack;
@@ -101,12 +103,26 @@ const DOUBLE_BAG_FISH_KEYS = new Set(['shark', 'marlin', 'sailfish', 'grouper', 
 const DRAGON_ZONE_INDEX = 3;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
+const UPGRADE_TITLES = [
+  { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
+  { name: 'BRONZE', medal: '🥉', border: 0xb87333, text: '#fdba74' },
+  { name: 'SILVER', medal: '🥈', border: 0xc0c0c0, text: '#e2e8f0' },
+  { name: 'GOLD', medal: '🥇', border: 0xffd700, text: '#fde047' },
+] as const;
 
 export class OceanScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Container;
   private facing = 1;
   private speed = 250;
   private readonly bulletDamage = 1;
+  private attackMultiplier = 1;
+  private defenseMultiplier = 1;
+  private rapidFireMultiplier = 1;
+  private bulletSpeedMultiplier = 1;
+  private autoFireEnabled = true;
+  private regenAmount = 0;
+  private regenInterval = 0;
+  private regenTimer = 0;
   private readonly maxHp = 250;
   private playerHp = 250;
   private playerInvuln = 0;
@@ -123,6 +139,8 @@ export class OceanScene extends Phaser.Scene {
   private keyT!: Phaser.Input.Keyboard.Key;
   private keyM!: Phaser.Input.Keyboard.Key;
   private keyG!: Phaser.Input.Keyboard.Key;
+  private keyEnter!: Phaser.Input.Keyboard.Key;
+  private keyNumbers: Phaser.Input.Keyboard.Key[] = [];
 
   private readonly audio = new GameAudio();
 
@@ -141,6 +159,7 @@ export class OceanScene extends Phaser.Scene {
 
   private hudText!: Phaser.GameObjects.Text;
   private bagText!: Phaser.GameObjects.Text;
+  private statsText!: Phaser.GameObjects.Text;
   private noticeText!: Phaser.GameObjects.Text;
   private noticeTimer = 0;
 
@@ -181,6 +200,19 @@ export class OceanScene extends Phaser.Scene {
   private dragonBossBar!: Phaser.GameObjects.Graphics;
   private dragonBossText!: Phaser.GameObjects.Text;
   private dragonLoot: string[] = [];
+
+  private menuMode: MenuMode = null;
+  private menuStage = 0;
+  private menuInputLockedUntil = 0;
+  private menuObjects: Phaser.GameObjects.GameObject[] = [];
+  private menuTargets: Array<{ bounds: Phaser.Geom.Rectangle; action: () => void }> = [];
+  private pendingZoneTransition?: { zoneIndex: number; spawnY: number };
+  private completedUpgradeStages = new Set<number>();
+  private upgradeRanks: Record<'rapid' | 'defense' | 'attack', number> = {
+    rapid: 0,
+    defense: 0,
+    attack: 0,
+  };
 
   private spawnTimer = 0;
   private shootCooldown = 0;
@@ -244,6 +276,13 @@ export class OceanScene extends Phaser.Scene {
       this.keyT = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
       this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
       this.keyG = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G);
+      this.keyEnter = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+      this.keyNumbers = [
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+      ];
     }
 
     this.hudText = this.add
@@ -262,6 +301,15 @@ export class OceanScene extends Phaser.Scene {
         color: '#fde047',
         backgroundColor: 'rgba(2, 12, 23, 0.65)',
         padding: { x: 10, y: 5 },
+      })
+      .setDepth(30);
+
+    this.statsText = this.add
+      .text(14, 80, '', {
+        fontSize: '12px',
+        color: '#e0f2fe',
+        backgroundColor: 'rgba(2, 12, 23, 0.65)',
+        padding: { x: 10, y: 4 },
       })
       .setDepth(30);
 
@@ -316,6 +364,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === DRAGON_ZONE_INDEX) this.ensureDragonVisual();
     else this.spawnFishWave(6);
     this.updateHud();
+    this.showStartMenu();
   }
 
   private createControls() {
@@ -408,6 +457,13 @@ export class OceanScene extends Phaser.Scene {
       const px = pointer.x;
       const py = pointer.y;
 
+      if (this.menuMode) {
+        if (this.time.now < this.menuInputLockedUntil) return;
+        const target = this.menuTargets.find((item) => item.bounds.contains(px, py));
+        target?.action();
+        return;
+      }
+
       if (
         this.harvestBtnBg.visible &&
         Phaser.Geom.Rectangle.Contains(this.harvestBtnBg.getBounds(), px, py)
@@ -497,6 +553,246 @@ export class OceanScene extends Phaser.Scene {
     this.joyVec.y = ny * strength;
   }
 
+  private destroyMenu() {
+    for (const object of this.menuObjects) object.destroy();
+    this.menuObjects = [];
+    this.menuTargets = [];
+  }
+
+  private addMenuObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.menuObjects.push(object);
+    return object;
+  }
+
+  private showStartMenu() {
+    this.menuMode = 'start';
+    this.menuInputLockedUntil = this.time.now + 250;
+    this.pendingZoneTransition = undefined;
+    this.rebuildMenu();
+  }
+
+  private showUpgradeMenu(stage: number, pendingZone?: { zoneIndex: number; spawnY: number }) {
+    this.menuMode = 'upgrade';
+    this.menuInputLockedUntil = this.time.now + 250;
+    this.menuStage = Phaser.Math.Clamp(stage, 0, 3);
+    this.pendingZoneTransition = pendingZone;
+    this.rebuildMenu();
+  }
+
+  private rebuildMenu() {
+    this.destroyMenu();
+    if (!this.menuMode) return;
+    const { width, height } = this.scale;
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x020617, 0.96).setDepth(100);
+    this.addMenuObject(overlay);
+
+    if (this.menuMode === 'start') {
+      const title = this.add
+        .text(width / 2, height * 0.28, '🌊 서바이벌오션', {
+          fontSize: `${Math.max(30, Math.min(54, width * 0.085))}px`,
+          color: '#7dd3fc',
+          fontStyle: 'bold',
+          align: 'center',
+          stroke: '#082f49',
+          strokeThickness: 7,
+        })
+        .setOrigin(0.5)
+        .setDepth(101);
+      const subtitle = this.add
+        .text(width / 2, height * 0.39, '바다를 탐험하고 물고기를 수집하세요!\n구역마다 한 번씩 새로운 강화를 고를 수 있습니다.', {
+          fontSize: `${Math.max(14, Math.min(21, width * 0.034))}px`,
+          color: '#e0f2fe',
+          align: 'center',
+          lineSpacing: 8,
+          wordWrap: { width: Math.max(280, width - 50) },
+        })
+        .setOrigin(0.5)
+        .setDepth(101);
+      const buttonWidth = Math.min(360, width - 54);
+      const buttonY = height * 0.59;
+      const button = this.add
+        .rectangle(width / 2, buttonY, buttonWidth, 74, 0x0284c7, 1)
+        .setStrokeStyle(4, 0x7dd3fc, 1)
+        .setDepth(101);
+      const buttonText = this.add
+        .text(width / 2, buttonY, '서바이벌오션 시작하기', {
+          fontSize: `${Math.max(18, Math.min(25, width * 0.045))}px`,
+          color: '#ffffff',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(102);
+      const hint = this.add
+        .text(width / 2, buttonY + 62, '버튼 터치 또는 Enter', { fontSize: '13px', color: '#94a3b8' })
+        .setOrigin(0.5)
+        .setDepth(101);
+      this.menuObjects.push(title, subtitle, button, buttonText, hint);
+      this.menuTargets.push({ bounds: button.getBounds(), action: () => this.showUpgradeMenu(0) });
+      return;
+    }
+
+    this.buildUpgradeCards(width, height);
+  }
+
+  private getUpgradeCardContent() {
+    const rapid = [
+      ['난사속도 1.1배', '스페이스바·발사 버튼을 길게 누를 때 조금 더 빠르게 발사'],
+      ['난사속도 2배', '연속 발사 속도가 2배로 증가'],
+      ['난사속도 4배', '연속 발사 속도가 4배로 증가'],
+      ['난사속도 11배', '초고속 연사\n대신 공격력 1/2'],
+    ];
+    const defense = [
+      ['방어력 2배', '받는 피해가 절반으로 감소'],
+      ['방어력 4배', '받는 피해 감소\n공격력 2배 추가'],
+      ['방어력 5배', '20초마다 체력 5 회복'],
+      ['방어력 8배', '10초마다 체력 10 회복'],
+    ];
+    const attack = [
+      ['공격력 2배', '총알 한 발의 공격력이 2배'],
+      ['공격력 4배', '총알 한 발의 공격력이 4배'],
+      ['공격력 5배', '강력한 총알\n대신 누르기 난사 불가'],
+      ['공격력 10배', '최강 공격력\n대신 총알 속도 저하'],
+    ];
+    const rapidRank = Phaser.Math.Clamp(this.upgradeRanks.rapid, 0, 3);
+    const defenseRank = Phaser.Math.Clamp(this.upgradeRanks.defense, 0, 3);
+    const attackRank = Phaser.Math.Clamp(this.upgradeRanks.attack, 0, 3);
+    return [
+      { key: 'rapid', rank: rapidRank, icon: '⚡', title: rapid[rapidRank][0], description: rapid[rapidRank][1], color: '#fde047' },
+      { key: 'defense', rank: defenseRank, icon: '🛡️', title: defense[defenseRank][0], description: defense[defenseRank][1], color: '#4ade80' },
+      { key: 'attack', rank: attackRank, icon: '⚔️', title: attack[attackRank][0], description: attack[attackRank][1], color: '#fb7185' },
+      { key: 'skip', rank: 0, icon: '🚫', title: '강화 포기', description: '“강화 따위 필요 없어!”\n이번 강화를 건너뜁니다', color: '#fb923c' },
+    ];
+  }
+
+  private buildUpgradeCards(width: number, height: number) {
+    const stage = this.menuStage;
+    const header = this.add
+      .text(width / 2, Math.max(44, height * 0.075), `🌊 강화 선택 ${stage + 1}/4`, {
+        fontSize: `${Math.max(22, Math.min(34, width * 0.06))}px`,
+        color: '#7dd3fc',
+        fontStyle: 'bold',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(102);
+    const zoneLabel = stage === 0 ? '게임 시작 강화' : `${ZONES[stage].name} 진입 강화`;
+    const guide = this.add
+      .text(width / 2, Math.max(78, height * 0.13), `${zoneLabel} · 네 가지 중 하나를 고르세요`, {
+        fontSize: `${Math.max(13, Math.min(18, width * 0.03))}px`,
+        color: '#cbd5e1',
+      })
+      .setOrigin(0.5)
+      .setDepth(102);
+    this.menuObjects.push(header, guide);
+
+    const gap = Math.max(10, Math.min(22, width * 0.025));
+    const cardWidth = Math.min(310, (width - gap * 3) / 2);
+    const availableHeight = height - Math.max(135, height * 0.18) - 40;
+    const cardHeight = Math.min(220, Math.max(128, (availableHeight - gap) / 2));
+    const gridWidth = cardWidth * 2 + gap;
+    const gridHeight = cardHeight * 2 + gap;
+    const startX = (width - gridWidth) / 2 + cardWidth / 2;
+    const startY = Math.max(130, height * 0.18) + (availableHeight - gridHeight) / 2 + cardHeight / 2;
+    const cards = this.getUpgradeCardContent();
+
+    cards.forEach((card, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const x = startX + column * (cardWidth + gap);
+      const y = startY + row * (cardHeight + gap);
+      const background = this.add
+        .rectangle(x, y, cardWidth, cardHeight, 0x0f172a, 0.98)
+        .setStrokeStyle(card.rank === 0 ? 4 : 7, UPGRADE_TITLES[card.rank].border, 1)
+        .setDepth(101);
+      const tier = card.rank === 0 || index === 3 ? '' : `\n${UPGRADE_TITLES[card.rank].name}`;
+      const text = this.add
+        .text(x, y, `${index + 1}. ${card.icon}\n${card.title}${tier}\n\n${card.description}`, {
+          fontSize: `${Math.max(12, Math.min(19, cardWidth * 0.07))}px`,
+          color: card.color,
+          fontStyle: 'bold',
+          align: 'center',
+          lineSpacing: 4,
+          wordWrap: { width: cardWidth - 20 },
+        })
+        .setOrigin(0.5)
+        .setDepth(102);
+      this.menuObjects.push(background, text);
+      this.menuTargets.push({
+        bounds: background.getBounds(),
+        action: () => this.selectUpgrade(card.key as UpgradeChoice),
+      });
+    });
+  }
+
+  private selectUpgrade(choice: UpgradeChoice) {
+    const stage = this.menuStage;
+    const rank = choice === 'skip' ? 0 : Phaser.Math.Clamp(this.upgradeRanks[choice], 0, 3);
+    const message = this.applyUpgrade(choice, rank);
+    if (choice !== 'skip') this.upgradeRanks[choice] = Math.min(4, this.upgradeRanks[choice] + 1);
+    if (choice === 'skip') this.audio.playDenied();
+    else this.audio.playLevelUp();
+    this.completedUpgradeStages.add(stage);
+    const transition = this.pendingZoneTransition;
+    this.menuMode = null;
+    this.pendingZoneTransition = undefined;
+    this.destroyMenu();
+    if (transition) this.changeZone(transition.zoneIndex, transition.spawnY);
+    this.showNotice(message);
+    this.updateHud();
+  }
+
+  private applyUpgrade(choice: UpgradeChoice, rank: number): string {
+    if (choice === 'rapid') {
+      this.rapidFireMultiplier = [1.1, 2, 4, 11][rank];
+      this.autoFireEnabled = true;
+      if (rank === 3) this.attackMultiplier *= 0.5;
+      return `⚡ 난사 강화 완료! 난사속도 ${this.rapidFireMultiplier}배${rank === 3 ? ' · 공격력 1/2' : ''}`;
+    }
+    if (choice === 'defense') {
+      this.defenseMultiplier = [2, 4, 5, 8][rank];
+      if (rank === 1) this.attackMultiplier = Math.max(this.attackMultiplier, 2);
+      if (rank === 2) {
+        this.regenAmount = 5;
+        this.regenInterval = 20;
+        this.regenTimer = 20;
+      } else if (rank === 3) {
+        this.regenAmount = 10;
+        this.regenInterval = 10;
+        this.regenTimer = 10;
+      }
+      return `🛡️ 방어 강화 완료! 방어력 ${this.defenseMultiplier}배${rank >= 2 ? ` · ${this.regenInterval}초마다 ${this.regenAmount} 회복` : ''}`;
+    }
+    if (choice === 'attack') {
+      this.attackMultiplier = [2, 4, 5, 10][rank];
+      if (rank === 2) this.autoFireEnabled = false;
+      if (rank === 3) this.bulletSpeedMultiplier = 0.65;
+      return `⚔️ 공격 강화 완료! 공격력 ${this.attackMultiplier}배${rank === 2 ? ' · 난사 불가' : rank === 3 ? ' · 총알 속도 저하' : ''}`;
+    }
+    return '🚫 이번 강화는 포기했습니다. 현재 능력치를 유지합니다.';
+  }
+
+  private requestZoneChange(nextIndex: number, spawnY: number) {
+    if (nextIndex > this.zoneIndex && !this.completedUpgradeStages.has(nextIndex)) {
+      this.showUpgradeMenu(nextIndex, { zoneIndex: nextIndex, spawnY });
+      return;
+    }
+    this.changeZone(nextIndex, spawnY);
+  }
+
+  private updateMenuKeyboard() {
+    if (!this.menuMode) return;
+    if (this.menuMode === 'start' && this.keyEnter && Phaser.Input.Keyboard.JustDown(this.keyEnter)) {
+      this.showUpgradeMenu(0);
+      return;
+    }
+    if (this.menuMode === 'upgrade') {
+      const choices: UpgradeChoice[] = ['rapid', 'defense', 'attack', 'skip'];
+      this.keyNumbers.forEach((key, index) => {
+        if (Phaser.Input.Keyboard.JustDown(key)) this.selectUpgrade(choices[index]);
+      });
+    }
+  }
+
   private layoutUI(width: number, height: number) {
     this.drawZoneBackdrop();
 
@@ -536,7 +832,9 @@ export class OceanScene extends Phaser.Scene {
 
     this.player.x = Phaser.Math.Clamp(this.player.x, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y, 24, height - 20);
+    this.statsText.setPosition(14, 80);
     this.layoutDragon();
+    if (this.menuMode) this.rebuildMenu();
   }
 
   private ensureDragonVisual() {
@@ -597,7 +895,7 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.dragonRespawnText?.setPosition(width * 0.64, height * 0.49);
-    this.dragonBossText.setPosition(width / 2, 120);
+    this.dragonBossText.setPosition(width / 2, 145);
   }
 
   private applyDragonAppearance() {
@@ -816,7 +1114,7 @@ export class OceanScene extends Phaser.Scene {
     const width = this.scale.width;
     const barWidth = Math.min(width - 48, 560);
     const x = (width - barWidth) / 2;
-    const y = 94;
+    const y = 118;
     const ratio = Phaser.Math.Clamp(this.dragonHp / DRAGON_MAX_HP, 0, 1);
     this.dragonBossBar.clear();
     this.dragonBossBar.fillStyle(0x1f2937, 0.95).fillRoundedRect(x, y, barWidth, 18, 7);
@@ -993,7 +1291,7 @@ export class OceanScene extends Phaser.Scene {
 
   private fireBullet() {
     if (this.shootCooldown > 0) return;
-    this.shootCooldown = 0.22;
+    this.shootCooldown = 0.22 / this.rapidFireMultiplier;
     this.audio.playShoot();
 
     const gfx = this.add.circle(this.player.x + this.facing * 22, this.player.y, 6, 0x38bdf8);
@@ -1002,7 +1300,7 @@ export class OceanScene extends Phaser.Scene {
 
     this.bullets.push({
       gfx,
-      vx: this.facing * 520,
+      vx: this.facing * 520 * this.bulletSpeedMultiplier,
       vy: 0,
       life: 1.5,
     });
@@ -1053,9 +1351,10 @@ export class OceanScene extends Phaser.Scene {
 
   private damagePlayer(amount: number, attackerName: string) {
     if (this.playerInvuln > 0) return;
-    this.playerHp = Math.max(0, this.playerHp - amount);
+    const reducedAmount = Math.max(1, Math.ceil(amount / this.defenseMultiplier));
+    this.playerHp = Math.max(0, this.playerHp - reducedAmount);
     this.playerInvuln = 1.0;
-    this.showNotice(`${attackerName}의 공격! (-${amount} HP)`);
+    this.showNotice(`${attackerName}의 공격! (-${reducedAmount} HP)`);
 
     if (this.playerHp <= 0) {
       this.audio.playDeath();
@@ -1107,15 +1406,39 @@ export class OceanScene extends Phaser.Scene {
       this.dragonLoot.length > 0 ? ` | 전리품: 비늘×${scaleCount} 머리뼈×${skullCount}` : '';
     const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
+    const rapidText = this.autoFireEnabled ? `난사×${this.rapidFireMultiplier}` : '난사 불가';
+    const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
+    const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
+    this.statsText.setText(
+      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}`
+    );
   }
 
   update(_time: number, delta: number) {
     const dt = delta / 1000;
     const { width, height } = this.scale;
 
+    if (this.menuMode) {
+      this.updateMenuKeyboard();
+      return;
+    }
+
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
-    if (this.shootHolding && this.shootCooldown <= 0) {
+    if (this.autoFireEnabled && this.shootHolding && this.shootCooldown <= 0) {
       this.fireBullet();
+    }
+
+    if (this.regenAmount > 0 && this.regenInterval > 0) {
+      this.regenTimer -= dt;
+      if (this.regenTimer <= 0) {
+        this.regenTimer = this.regenInterval;
+        if (this.playerHp < this.maxHp) {
+          const healed = Math.min(this.regenAmount, this.maxHp - this.playerHp);
+          this.playerHp += healed;
+          this.showNotice(`💚 자동 회복 +${healed} HP`);
+          this.audio.playCollect();
+        }
+      }
     }
 
     if (this.playerInvuln > 0) {
@@ -1168,8 +1491,12 @@ export class OceanScene extends Phaser.Scene {
       this.player.scaleX = 1;
     }
 
-    if (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
-      this.fireBullet();
+    if (this.keySpace) {
+      if (this.autoFireEnabled && this.keySpace.isDown && this.shootCooldown <= 0) {
+        this.fireBullet();
+      } else if (!this.autoFireEnabled && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+        this.fireBullet();
+      }
     }
     if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
       this.tryCollectNearbyFish();
@@ -1189,7 +1516,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.player.y >= height - 22 && this.zoneIndex < ZONES.length - 1) {
       const nextZone = ZONES[this.zoneIndex + 1];
       if (this.level >= nextZone.reqLevel) {
-        this.changeZone(this.zoneIndex + 1, 56);
+        this.requestZoneChange(this.zoneIndex + 1, 56);
         return;
       } else {
         this.player.y = height - 26;
@@ -1224,14 +1551,14 @@ export class OceanScene extends Phaser.Scene {
         (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
         this.dragonSprite.getBounds().contains(b.gfx.x, b.gfx.y)
       ) {
-        this.damageDragon(this.bulletDamage);
+        this.damageDragon(this.bulletDamage * this.attackMultiplier);
         hit = true;
       }
       for (const fish of this.fishList) {
         if (hit) break;
         if (fish.stunned) continue;
         if (Phaser.Math.Distance.Between(b.gfx.x, b.gfx.y, fish.sprite.x, fish.sprite.y) < 38) {
-          fish.hp = Math.max(0, fish.hp - this.bulletDamage);
+          fish.hp = Math.max(0, fish.hp - this.bulletDamage * this.attackMultiplier);
           hit = true;
           if (fish.hp <= 0) {
             fish.stunned = true;
