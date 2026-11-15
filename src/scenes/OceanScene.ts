@@ -84,7 +84,7 @@ export class OceanScene extends Phaser.Scene {
   private expToNext = 50;
   private bag: string[] = [];
   private readonly maxBag = 15;
-  private readonly maxFishPerZone = 25;
+  private readonly maxFishPerZone = 12;
 
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private decoGraphics!: Phaser.GameObjects.Graphics;
@@ -445,7 +445,7 @@ export class OceanScene extends Phaser.Scene {
     this.hudText.setText(
       `🌊 ${zone.name} (${depth}m) | ⭐ Lv.${this.level} (${this.exp}/${this.expToNext})`
     );
-    this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | 물고기: ${this.fishList.length}/25`);
+    this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | 물고기: ${this.fishList.length}/${this.maxFishPerZone}`);
   }
 
   update(_time: number, delta: number) {
