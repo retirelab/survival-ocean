@@ -1,0 +1,259 @@
+type AudioContextConstructor = typeof AudioContext;
+
+interface BrowserWindow extends Window {
+  webkitAudioContext?: AudioContextConstructor;
+}
+
+export class GameAudio {
+  private context: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private ambientNoise: AudioBufferSourceNode | null = null;
+  private ambientDrone: OscillatorNode | null = null;
+  private ambientLfo: OscillatorNode | null = null;
+  private muted = false;
+  private readonly lastPlayed = new Map<string, number>();
+
+  unlock() {
+    if (!this.context) {
+      const AudioContextClass =
+        window.AudioContext ?? (window as BrowserWindow).webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      this.context = new AudioContextClass();
+      this.master = this.context.createGain();
+      this.master.gain.value = this.muted ? 0 : 0.32;
+      this.master.connect(this.context.destination);
+      this.startAmbience();
+    }
+
+    if (this.context.state === 'suspended') {
+      void this.context.resume();
+    }
+  }
+
+  toggleMute(): boolean {
+    this.unlock();
+    this.muted = !this.muted;
+    if (this.context && this.master) {
+      this.master.gain.setTargetAtTime(
+        this.muted ? 0 : 0.32,
+        this.context.currentTime,
+        0.03
+      );
+    }
+    return this.muted;
+  }
+
+  playShoot() {
+    if (!this.canPlay('shoot', 0.06)) return;
+    this.tone(460, 0.075, 'square', 0.11, 170);
+  }
+
+  playHit() {
+    if (!this.canPlay('hit', 0.07)) return;
+    this.noiseBurst(0.055, 0.075, 900);
+    this.tone(155, 0.07, 'triangle', 0.09, 90);
+  }
+
+  playStun() {
+    if (!this.canPlay('stun', 0.15)) return;
+    this.tone(520, 0.16, 'sine', 0.12, 720);
+    this.tone(780, 0.24, 'sine', 0.09, 620, 0.08);
+  }
+
+  playCollect() {
+    if (!this.canPlay('collect', 0.1)) return;
+    this.tone(523.25, 0.13, 'sine', 0.1, 659.25);
+    this.tone(659.25, 0.18, 'sine', 0.09, 783.99, 0.07);
+  }
+
+  playTank() {
+    if (!this.canPlay('tank', 0.2)) return;
+    this.tone(360, 0.2, 'sine', 0.1, 170);
+    this.noiseBurst(0.12, 0.035, 480);
+  }
+
+  playLevelUp() {
+    if (!this.canPlay('level', 0.8)) return;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((note, index) => {
+      this.tone(note, 0.22, 'sine', 0.105, note * 1.01, index * 0.085);
+    });
+  }
+
+  playDamage() {
+    if (!this.canPlay('damage', 0.25)) return;
+    this.noiseBurst(0.14, 0.1, 260);
+    this.tone(115, 0.2, 'sawtooth', 0.13, 58);
+  }
+
+  playDeath() {
+    if (!this.canPlay('death', 0.8)) return;
+    this.noiseBurst(0.35, 0.09, 220);
+    this.tone(280, 0.55, 'sawtooth', 0.12, 52);
+  }
+
+  playZoneChange(deeper: boolean) {
+    if (!this.canPlay('zone', 0.45)) return;
+    if (deeper) {
+      this.tone(230, 0.45, 'sine', 0.1, 92);
+      this.noiseBurst(0.3, 0.035, 320);
+    } else {
+      this.tone(130, 0.4, 'sine', 0.09, 330);
+    }
+  }
+
+  playDenied() {
+    if (!this.canPlay('denied', 0.8)) return;
+    this.tone(185, 0.12, 'square', 0.075, 150);
+    this.tone(150, 0.12, 'square', 0.065, 125, 0.13);
+  }
+
+  destroy() {
+    this.stopNode(this.ambientNoise);
+    this.stopNode(this.ambientDrone);
+    this.stopNode(this.ambientLfo);
+    this.ambientNoise = null;
+    this.ambientDrone = null;
+    this.ambientLfo = null;
+
+    if (this.context && this.context.state !== 'closed') {
+      void this.context.close();
+    }
+    this.context = null;
+    this.master = null;
+  }
+
+  private startAmbience() {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || this.ambientNoise) return;
+
+    const frameCount = context.sampleRate * 3;
+    const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let smoothNoise = 0;
+    for (let i = 0; i < frameCount; i++) {
+      const whiteNoise = Math.random() * 2 - 1;
+      smoothNoise = (smoothNoise + 0.035 * whiteNoise) / 1.035;
+      data[i] = smoothNoise * 2.8;
+    }
+
+    const noise = context.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 520;
+    filter.Q.value = 0.7;
+
+    const ambienceGain = context.createGain();
+    ambienceGain.gain.value = 0.055;
+
+    const lfo = context.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.08;
+    const lfoGain = context.createGain();
+    lfoGain.gain.value = 0.018;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(ambienceGain.gain);
+    noise.connect(filter);
+    filter.connect(ambienceGain);
+    ambienceGain.connect(master);
+
+    const drone = context.createOscillator();
+    drone.type = 'sine';
+    drone.frequency.value = 54;
+    const droneGain = context.createGain();
+    droneGain.gain.value = 0.018;
+    drone.connect(droneGain);
+    droneGain.connect(master);
+
+    noise.start();
+    drone.start();
+    lfo.start();
+    this.ambientNoise = noise;
+    this.ambientDrone = drone;
+    this.ambientLfo = lfo;
+  }
+
+  private tone(
+    frequency: number,
+    duration: number,
+    type: OscillatorType,
+    volume: number,
+    endFrequency = frequency,
+    delay = 0
+  ) {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || this.muted || context.state === 'closed') return;
+
+    const start = context.currentTime + delay;
+    const end = start + duration;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      Math.max(20, endFrequency),
+      end
+    );
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    oscillator.connect(gain);
+    gain.connect(master);
+    oscillator.start(start);
+    oscillator.stop(end + 0.02);
+  }
+
+  private noiseBurst(duration: number, volume: number, cutoff: number) {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || this.muted || context.state === 'closed') return;
+
+    const frameCount = Math.max(1, Math.floor(context.sampleRate * duration));
+    const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < frameCount; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / frameCount);
+    }
+
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoff;
+    gain.gain.value = volume;
+
+    source.buffer = buffer;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    source.start();
+  }
+
+  private canPlay(name: string, cooldown: number): boolean {
+    if (!this.context || !this.master || this.muted) return false;
+    const now = this.context.currentTime;
+    const last = this.lastPlayed.get(name) ?? -Infinity;
+    if (now - last < cooldown) return false;
+    this.lastPlayed.set(name, now);
+    return true;
+  }
+
+  private stopNode(node: AudioScheduledSourceNode | null) {
+    if (!node) return;
+    try {
+      node.stop();
+    } catch {
+      // 이미 정지된 오디오 노드는 다시 정지할 필요가 없습니다.
+    }
+  }
+}
