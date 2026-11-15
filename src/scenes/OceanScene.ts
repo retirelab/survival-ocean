@@ -150,7 +150,7 @@ export class OceanScene extends Phaser.Scene {
   private level = 1;
   private readonly maxLevel = 20;
   private bag: string[] = [];
-  private readonly maxBag = 15;
+  private readonly maxBag = 12;
   private readonly maxFishPerZone = 12;
 
   private bgGraphics!: Phaser.GameObjects.Graphics;
@@ -1280,7 +1280,7 @@ export class OceanScene extends Phaser.Scene {
       }
     } else {
       this.audio.playTank();
-      this.showNotice(`수조에 ${count}마리를 비웠어요! (15마리 가득 채워 비우면 Lv UP)`);
+      this.showNotice(`수조에 ${count}마리를 비웠어요! (${this.maxBag}마리 가득 채워 비우면 Lv UP)`);
     }
     this.updateHud();
   }
@@ -1441,7 +1441,7 @@ export class OceanScene extends Phaser.Scene {
   private tryCollectNearbyFish() {
     if (this.bag.length >= this.maxBag) {
       this.audio.playDenied();
-      this.showNotice('가방이 15마리로 가득 찼어요! 수조 버튼(T)을 눌러 가방을 비우세요.');
+      this.showNotice(`가방이 ${this.maxBag}마리로 가득 찼어요! 수조 버튼(T)을 눌러 가방을 비우세요.`);
       return;
     }
 
