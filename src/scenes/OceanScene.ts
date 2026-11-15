@@ -46,6 +46,8 @@ interface BulletEntity {
   vx: number;
   vy: number;
   life: number;
+  piercing: boolean;
+  hitFish: Set<FishEntity>;
 }
 
 type DragonState = 'sleeping' | 'awake' | 'dead' | 'respawning';
@@ -59,6 +61,7 @@ interface OreNode {
   x: number;
   y: number;
   remaining: number;
+  respawnRemaining: number;
 }
 
 interface DragonDangerZone {
@@ -114,6 +117,7 @@ const DRAGON_MAX_HP = 1250;
 const DRAGON_ATTACK_DAMAGE = 50;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
 const ORE_MINES_PER_NODE = 5;
+const ORE_RESPAWN_SECONDS = 60;
 const MINERAL_TABLE: Array<{ name: MineralType; limit: number; color: number; chance: number }> = [
   { name: '다이아몬드', limit: 0.15, color: 0x67e8f9, chance: 15 },
   { name: '루비', limit: 0.35, color: 0xe11d48, chance: 20 },
@@ -1504,8 +1508,8 @@ export class OceanScene extends Phaser.Scene {
   private ensureOreNodes() {
     if (this.oreNodes.length > 0) return;
     this.oreNodes = [
-      { id: 'upper', x: 0, y: 0, remaining: ORE_MINES_PER_NODE },
-      { id: 'lower', x: 0, y: 0, remaining: ORE_MINES_PER_NODE },
+      { id: 'upper', x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 },
+      { id: 'lower', x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 },
     ];
   }
 
@@ -1595,6 +1599,7 @@ export class OceanScene extends Phaser.Scene {
     const roll = Math.random();
     const mineral = MINERAL_TABLE.find((entry) => roll < entry.limit) ?? MINERAL_TABLE[MINERAL_TABLE.length - 1];
     this.nearbyOre.remaining -= 1;
+    if (this.nearbyOre.remaining <= 0) this.nearbyOre.respawnRemaining = ORE_RESPAWN_SECONDS;
     this.mineralInventory[mineral.name] += 1;
     this.audio.playCollect();
     this.showMinedMineral(this.nearbyOre, mineral.name, mineral.color);
@@ -1605,6 +1610,24 @@ export class OceanScene extends Phaser.Scene {
     this.drawZoneBackdrop();
     this.updateMiningInteraction();
     this.updateHud();
+  }
+
+  private updateOreRespawns(dt: number) {
+    let regenerated = false;
+    for (const ore of this.oreNodes) {
+      if (ore.remaining > 0 || ore.respawnRemaining <= 0) continue;
+      ore.respawnRemaining = Math.max(0, ore.respawnRemaining - dt);
+      if (ore.respawnRemaining <= 0) {
+        ore.remaining = ORE_MINES_PER_NODE;
+        regenerated = true;
+      }
+    }
+    if (!regenerated) return;
+    if (this.zoneIndex === 1) {
+      this.drawZoneBackdrop();
+      this.updateMiningInteraction();
+      this.showNotice('✨ 광석바위가 다시 생성되어 5번 채굴할 수 있습니다!');
+    }
   }
 
   private showMinedMineral(ore: OreNode, name: MineralType, color: number) {
@@ -1733,23 +1756,26 @@ export class OceanScene extends Phaser.Scene {
 
   private fireBullet() {
     if (this.shootCooldown > 0) return;
+    const precisionShot = this.aiming;
     this.shootCooldown = 0.22 / this.rapidFireMultiplier;
     this.audio.playShoot();
 
     const gfx = this.add.circle(
       this.player.x + this.aimDirection.x * 22,
       this.player.y + this.aimDirection.y * 22,
-      6,
-      0x38bdf8
+      precisionShot ? 8 : 6,
+      precisionShot ? 0xfde047 : 0x38bdf8
     );
     gfx.setStrokeStyle(2, 0xe0f2fe);
     gfx.setDepth(8);
 
     this.bullets.push({
       gfx,
-      vx: this.aimDirection.x * 520 * this.bulletSpeedMultiplier,
-      vy: this.aimDirection.y * 520 * this.bulletSpeedMultiplier,
-      life: 1.5,
+      vx: this.aimDirection.x * (precisionShot ? 1450 : 520) * this.bulletSpeedMultiplier,
+      vy: this.aimDirection.y * (precisionShot ? 1450 : 520) * this.bulletSpeedMultiplier,
+      life: precisionShot ? 2 : 1.5,
+      piercing: precisionShot,
+      hitFish: new Set<FishEntity>(),
     });
     this.releaseAimAfterShot();
   }
@@ -1871,8 +1897,15 @@ export class OceanScene extends Phaser.Scene {
       .filter(([, count]) => count > 0)
       .map(([name, count]) => `${name}×${count}`)
       .join('  ');
+    const oreRespawns = this.oreNodes
+      .filter((ore) => ore.remaining <= 0 && ore.respawnRemaining > 0)
+      .map((ore) => `${ore.id === 'upper' ? '위' : '아래'}쪽 ${Math.ceil(ore.respawnRemaining)}초`)
+      .join(' · ');
+    const oreTimerText = this.zoneIndex === 1 && oreRespawns ? `\n🪨 광석 재생까지: ${oreRespawns}` : '';
     this.mineralText
-      .setText(mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요')
+      .setText(
+        `${mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요'}${oreTimerText}`
+      )
       .setVisible(this.zoneIndex === 1 || mineralTotal > 0);
   }
 
@@ -1889,6 +1922,7 @@ export class OceanScene extends Phaser.Scene {
     if (!zDown) this.aimLockedUntilRelease = false;
     this.setAiming(zDown && !this.aimLockedUntilRelease);
     const dt = rawDt * (this.aiming ? 0.25 : 1);
+    this.updateOreRespawns(rawDt);
 
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.autoFireEnabled && this.shootHolding && this.shootCooldown <= 0) {
@@ -2050,10 +2084,11 @@ export class OceanScene extends Phaser.Scene {
       }
       for (const fish of this.fishList) {
         if (hit) break;
-        if (fish.stunned) continue;
+        if (fish.stunned || b.hitFish.has(fish)) continue;
         if (Phaser.Math.Distance.Between(b.gfx.x, b.gfx.y, fish.sprite.x, fish.sprite.y) < 38) {
+          b.hitFish.add(fish);
           fish.hp = Math.max(0, fish.hp - this.bulletDamage * this.attackMultiplier);
-          hit = true;
+          hit = !b.piercing;
           if (fish.hp <= 0) {
             fish.stunned = true;
             fish.aggro = false;
@@ -2068,7 +2103,7 @@ export class OceanScene extends Phaser.Scene {
             this.audio.playHit();
           }
           fish.label.setText(this.formatFishLabel(fish));
-          break;
+          if (!b.piercing) break;
         }
       }
 
