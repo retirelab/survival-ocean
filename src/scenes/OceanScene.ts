@@ -52,6 +52,14 @@ type DragonState = 'sleeping' | 'awake' | 'dead' | 'respawning';
 type DragonAttack = 'breath' | 'arm' | 'tail';
 type UpgradeChoice = 'rapid' | 'defense' | 'attack' | 'skip';
 type MenuMode = 'start' | 'upgrade' | null;
+type MineralType = '다이아몬드' | '루비' | '사파이어' | '토파즈' | '부싯돌';
+
+interface OreNode {
+  id: 'upper' | 'lower';
+  x: number;
+  y: number;
+  remaining: number;
+}
 
 interface DragonDangerZone {
   type: DragonAttack;
@@ -105,6 +113,14 @@ const DRAGON_ZONE_INDEX = 3;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_ATTACK_DAMAGE = 50;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
+const ORE_MINES_PER_NODE = 5;
+const MINERAL_TABLE: Array<{ name: MineralType; limit: number; color: number; chance: number }> = [
+  { name: '다이아몬드', limit: 0.15, color: 0x67e8f9, chance: 15 },
+  { name: '루비', limit: 0.35, color: 0xe11d48, chance: 20 },
+  { name: '사파이어', limit: 0.55, color: 0x2563eb, chance: 20 },
+  { name: '토파즈', limit: 0.75, color: 0xf59e0b, chance: 20 },
+  { name: '부싯돌', limit: 1, color: 0x374151, chance: 25 },
+];
 const UPGRADE_TITLES = [
   { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
   { name: 'BRONZE', medal: '🥉', border: 0xb87333, text: '#fdba74' },
@@ -142,6 +158,7 @@ export class OceanScene extends Phaser.Scene {
   private keyT!: Phaser.Input.Keyboard.Key;
   private keyM!: Phaser.Input.Keyboard.Key;
   private keyG!: Phaser.Input.Keyboard.Key;
+  private keyE!: Phaser.Input.Keyboard.Key;
   private keyEnter!: Phaser.Input.Keyboard.Key;
   private keyNumbers: Phaser.Input.Keyboard.Key[] = [];
 
@@ -163,6 +180,7 @@ export class OceanScene extends Phaser.Scene {
   private hudText!: Phaser.GameObjects.Text;
   private bagText!: Phaser.GameObjects.Text;
   private statsText!: Phaser.GameObjects.Text;
+  private mineralText!: Phaser.GameObjects.Text;
   private noticeText!: Phaser.GameObjects.Text;
   private noticeTimer = 0;
 
@@ -188,6 +206,17 @@ export class OceanScene extends Phaser.Scene {
 
   private harvestBtnBg!: Phaser.GameObjects.Rectangle;
   private harvestBtnText!: Phaser.GameObjects.Text;
+  private mineBtnBg!: Phaser.GameObjects.Rectangle;
+  private mineBtnText!: Phaser.GameObjects.Text;
+  private oreNodes: OreNode[] = [];
+  private nearbyOre?: OreNode;
+  private mineralInventory: Record<MineralType, number> = {
+    다이아몬드: 0,
+    루비: 0,
+    사파이어: 0,
+    토파즈: 0,
+    부싯돌: 0,
+  };
 
   private dragonState: DragonState = 'sleeping';
   private dragonHp = DRAGON_MAX_HP;
@@ -280,6 +309,7 @@ export class OceanScene extends Phaser.Scene {
       this.keyT = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
       this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
       this.keyG = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G);
+      this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
       this.keyEnter = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
       this.keyNumbers = [
         this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
@@ -316,6 +346,16 @@ export class OceanScene extends Phaser.Scene {
         padding: { x: 10, y: 4 },
       })
       .setDepth(30);
+
+    this.mineralText = this.add
+      .text(14, 110, '', {
+        fontSize: '12px',
+        color: '#fef3c7',
+        backgroundColor: 'rgba(2, 12, 23, 0.72)',
+        padding: { x: 10, y: 4 },
+      })
+      .setDepth(30)
+      .setVisible(false);
 
     this.noticeText = this.add
       .text(width / 2, height - 175, '', {
@@ -453,6 +493,21 @@ export class OceanScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(36)
       .setVisible(false);
+
+    this.mineBtnBg = this.add
+      .rectangle(0, 0, 128, 48, 0xb45309, 0.96)
+      .setStrokeStyle(3, 0xfde68a, 1)
+      .setDepth(35)
+      .setVisible(false);
+    this.mineBtnText = this.add
+      .text(0, 0, '⛏️ 광질 (E)', {
+        fontSize: '14px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(36)
+      .setVisible(false);
   }
 
   private setupMultiTouchInput() {
@@ -475,6 +530,13 @@ export class OceanScene extends Phaser.Scene {
         this.harvestBtnBg.setScale(0.94);
         this.time.delayedCall(120, () => this.harvestBtnBg.setScale(1));
         this.tryHarvestDragon();
+        return;
+      }
+
+      if (this.mineBtnBg.visible && Phaser.Geom.Rectangle.Contains(this.mineBtnBg.getBounds(), px, py)) {
+        this.mineBtnBg.setScale(0.94);
+        this.time.delayedCall(120, () => this.mineBtnBg.setScale(1));
+        this.tryMineNearbyOre();
         return;
       }
 
@@ -830,6 +892,8 @@ export class OceanScene extends Phaser.Scene {
     const harvestY = height - 82;
     this.harvestBtnBg.setPosition(harvestX, harvestY);
     this.harvestBtnText.setPosition(harvestX, harvestY);
+    this.mineBtnBg.setPosition(harvestX, harvestY);
+    this.mineBtnText.setPosition(harvestX, harvestY);
 
     this.noticeText.setPosition(width / 2, height - 170);
     this.noticeText.setWordWrapWidth(Math.max(260, width - 40));
@@ -837,7 +901,9 @@ export class OceanScene extends Phaser.Scene {
     this.player.x = Phaser.Math.Clamp(this.player.x, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y, 24, height - 20);
     this.statsText.setPosition(14, 80);
+    this.mineralText.setPosition(14, 110);
     this.layoutDragon();
+    this.updateMiningInteraction();
     if (this.menuMode) this.rebuildMenu();
   }
 
@@ -1310,11 +1376,11 @@ export class OceanScene extends Phaser.Scene {
     } else if (this.zoneIndex === 1) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.9);
       this.decoGraphics.fillRect(0, height - 22, width, 22);
-      this.decoGraphics.fillStyle(0xfacc15, 0.85);
-      this.decoGraphics.fillTriangle(width * 0.15, height - 22, width * 0.2, height - 85, width * 0.25, height - 22);
-      this.decoGraphics.fillTriangle(width * 0.72, height - 22, width * 0.78, height - 95, width * 0.84, height - 22);
-      this.decoGraphics.fillStyle(0xf472b6, 0.85);
-      this.decoGraphics.fillCircle(width * 0.48, height - 32, 16);
+      this.ensureOreNodes();
+      this.layoutOreNodes(width, height);
+      this.drawRockShelf(width * 0.56, height * 0.16, width * 0.48, height * 0.2, false);
+      this.drawRockShelf(-width * 0.04, height * 0.66, width * 0.46, height * 0.19, true);
+      for (const ore of this.oreNodes) this.drawOreNode(ore);
     } else if (this.zoneIndex === 2) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.95);
       this.decoGraphics.fillRect(0, height - 20, width, 20);
@@ -1324,6 +1390,140 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(0xef4444, 0.9);
       this.decoGraphics.fillCircle(width - 50, height - 24, 12);
     }
+  }
+
+  private ensureOreNodes() {
+    if (this.oreNodes.length > 0) return;
+    this.oreNodes = [
+      { id: 'upper', x: 0, y: 0, remaining: ORE_MINES_PER_NODE },
+      { id: 'lower', x: 0, y: 0, remaining: ORE_MINES_PER_NODE },
+    ];
+  }
+
+  private layoutOreNodes(width: number, height: number) {
+    const upper = this.oreNodes.find((ore) => ore.id === 'upper');
+    const lower = this.oreNodes.find((ore) => ore.id === 'lower');
+    if (upper) {
+      upper.x = width * 0.76;
+      upper.y = height * 0.36;
+    }
+    if (lower) {
+      lower.x = width * 0.22;
+      lower.y = height * 0.62;
+    }
+  }
+
+  private drawRockShelf(x: number, y: number, width: number, height: number, pointsUp: boolean) {
+    const g = this.decoGraphics;
+    g.fillStyle(0x111827, 0.98);
+    g.fillRoundedRect(x, y, width, height, 18);
+    g.fillStyle(0x334155, 0.95);
+    g.fillRoundedRect(x + 10, y + 10, width - 20, height - 24, 14);
+    g.fillStyle(0x475569, 0.85);
+    const baseY = pointsUp ? y : y + height;
+    const tipY = pointsUp ? y - 34 : y + height + 34;
+    for (let step = 0; step < 4; step++) {
+      const px = x + width * (0.12 + step * 0.22);
+      g.fillTriangle(px, baseY, px + width * 0.1, tipY, px + width * 0.2, baseY);
+    }
+    g.lineStyle(3, 0x94a3b8, 0.4);
+    g.lineBetween(x + 18, y + height * 0.55, x + width * 0.62, y + height * 0.28);
+    g.lineBetween(x + width * 0.42, y + height * 0.75, x + width - 20, y + height * 0.48);
+  }
+
+  private drawOreNode(ore: OreNode) {
+    const g = this.decoGraphics;
+    const exhausted = ore.remaining <= 0;
+    const rockColor = exhausted ? 0x4b5563 : 0x172033;
+    g.fillStyle(0x020617, 0.95);
+    g.fillTriangle(ore.x - 38, ore.y + 28, ore.x - 8, ore.y - 38, ore.x + 38, ore.y + 28);
+    g.fillStyle(rockColor, 1);
+    g.fillTriangle(ore.x - 31, ore.y + 22, ore.x - 6, ore.y - 30, ore.x + 31, ore.y + 22);
+    if (!exhausted) {
+      const chips = [
+        { dx: -15, dy: 6, color: 0x67e8f9 },
+        { dx: 1, dy: -12, color: 0xe11d48 },
+        { dx: 15, dy: 7, color: 0x2563eb },
+        { dx: -2, dy: 13, color: 0xf59e0b },
+      ];
+      for (const chip of chips) {
+        g.fillStyle(chip.color, 1);
+        g.fillCircle(ore.x + chip.dx, ore.y + chip.dy, 6);
+      }
+    }
+  }
+
+  private updateMiningInteraction() {
+    if (this.zoneIndex !== 1) {
+      this.nearbyOre = undefined;
+      this.mineBtnBg.setVisible(false);
+      this.mineBtnText.setVisible(false);
+      return;
+    }
+    this.ensureOreNodes();
+    let nearest: OreNode | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const ore of this.oreNodes) {
+      if (ore.remaining <= 0) continue;
+      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, ore.x, ore.y);
+      if (distance <= 92 && distance < nearestDistance) {
+        nearest = ore;
+        nearestDistance = distance;
+      }
+    }
+    this.nearbyOre = nearest;
+    this.mineBtnBg.setVisible(Boolean(nearest));
+    this.mineBtnText.setVisible(Boolean(nearest));
+    if (nearest) this.mineBtnText.setText(`⛏️ 광질 (E) ${nearest.remaining}/5`);
+  }
+
+  private tryMineNearbyOre() {
+    if (this.zoneIndex !== 1 || !this.nearbyOre || this.nearbyOre.remaining <= 0) {
+      this.audio.playDenied();
+      this.showNotice('채굴할 수 있는 광석바위 가까이 다가가세요!');
+      return;
+    }
+    const roll = Math.random();
+    const mineral = MINERAL_TABLE.find((entry) => roll < entry.limit) ?? MINERAL_TABLE[MINERAL_TABLE.length - 1];
+    this.nearbyOre.remaining -= 1;
+    this.mineralInventory[mineral.name] += 1;
+    this.audio.playCollect();
+    this.showMinedMineral(this.nearbyOre, mineral.name, mineral.color);
+    const remaining = this.nearbyOre.remaining;
+    this.showNotice(
+      `⛏️ ${mineral.name} 획득! (확률 ${mineral.chance}%)\n광석바위 남은 광질 ${remaining}/${ORE_MINES_PER_NODE}`
+    );
+    this.drawZoneBackdrop();
+    this.updateMiningInteraction();
+    this.updateHud();
+  }
+
+  private showMinedMineral(ore: OreNode, name: MineralType, color: number) {
+    const gem = this.add
+      .polygon(ore.x, ore.y - 8, [0, -16, 14, -5, 10, 14, 0, 20, -10, 14, -14, -5], color, 1)
+      .setStrokeStyle(3, 0xffffff, 0.9)
+      .setDepth(20);
+    const label = this.add
+      .text(ore.x, ore.y - 38, name, {
+        fontSize: '14px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(2, 6, 23, 0.8)',
+        padding: { x: 6, y: 3 },
+      })
+      .setOrigin(0.5)
+      .setDepth(21);
+    this.tweens.add({
+      targets: [gem, label],
+      y: '-=55',
+      alpha: 0,
+      duration: 950,
+      ease: 'Cubic.Out',
+      onComplete: () => {
+        gem.destroy();
+        label.destroy();
+      },
+    });
   }
 
   private showNotice(msg: string) {
@@ -1525,6 +1725,7 @@ export class OceanScene extends Phaser.Scene {
     }
     this.player.y = spawnY;
     this.drawZoneBackdrop();
+    this.updateMiningInteraction();
     if (this.zoneIndex === DRAGON_ZONE_INDEX) {
       this.ensureDragonVisual();
     } else {
@@ -1554,6 +1755,14 @@ export class OceanScene extends Phaser.Scene {
     this.statsText.setText(
       `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}`
     );
+    const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
+    const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
+      .filter(([, count]) => count > 0)
+      .map(([name, count]) => `${name}×${count}`)
+      .join('  ');
+    this.mineralText
+      .setText(mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요')
+      .setVisible(this.zoneIndex === 1 || mineralTotal > 0);
   }
 
   update(_time: number, delta: number) {
@@ -1630,6 +1839,7 @@ export class OceanScene extends Phaser.Scene {
 
     this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
+    this.updateMiningInteraction();
 
     if (vx < -0.08) {
       this.facing = -1;
@@ -1654,6 +1864,9 @@ export class OceanScene extends Phaser.Scene {
     }
     if (this.keyG && Phaser.Input.Keyboard.JustDown(this.keyG)) {
       this.tryHarvestDragon();
+    }
+    if (this.keyE && Phaser.Input.Keyboard.JustDown(this.keyE)) {
+      this.tryMineNearbyOre();
     }
     if (this.keyM && Phaser.Input.Keyboard.JustDown(this.keyM)) {
       const muted = this.audio.toggleMute();
