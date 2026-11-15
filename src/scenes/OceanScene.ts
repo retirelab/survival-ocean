@@ -99,7 +99,6 @@ const DEEP_FISH: FishSpec[] = [
   { key: 'tuna', name: '참다랑어', hp: 3, speed: 115, exp: 60, scale: 0.62 },
 ];
 
-const DOUBLE_BAG_FISH_KEYS = new Set(['shark', 'marlin', 'sailfish', 'grouper', 'tuna']);
 const DRAGON_ZONE_INDEX = 3;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
@@ -1319,10 +1318,12 @@ export class OceanScene extends Phaser.Scene {
       if (!fish.stunned) continue;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, fish.sprite.x, fish.sprite.y);
       if (dist <= 76) {
-        const bagCount = DOUBLE_BAG_FISH_KEYS.has(fish.spec.key) ? 2 : 1;
+        const bagCount = Phaser.Math.Clamp(this.zoneIndex + 1, 1, 3);
         if (this.bag.length + bagCount > this.maxBag) {
           this.audio.playDenied();
-          this.showNotice(`${fish.spec.name}는 가방에 2마리로 저장돼요. 가방을 먼저 수조(T)에 비워주세요!`);
+          this.showNotice(
+            `${ZONES[this.zoneIndex].name} 물고기는 가방에 ${bagCount}마리로 저장돼요. 가방을 먼저 수조(T)에 비워주세요!`
+          );
           return;
         }
         for (let count = 0; count < bagCount; count++) {
@@ -1330,9 +1331,11 @@ export class OceanScene extends Phaser.Scene {
         }
         this.audio.playCollect();
         if (this.bag.length >= this.maxBag) {
-          this.showNotice(`${fish.spec.name} 수집${bagCount === 2 ? ' (2마리 저장)' : ''}! 가방이 가득 찼으니 수조(T)에 비워 레벨업하세요!`);
+          this.showNotice(
+            `${fish.spec.name} 수집 (${bagCount}마리 저장)! 가방이 가득 찼으니 수조(T)에 비워 레벨업하세요!`
+          );
         } else {
-          this.showNotice(`${fish.spec.name} 수집${bagCount === 2 ? ' (2마리 저장)' : ''}! (가방 ${this.bag.length}/${this.maxBag})`);
+          this.showNotice(`${fish.spec.name} 수집 (${bagCount}마리 저장)! (가방 ${this.bag.length}/${this.maxBag})`);
         }
         fish.sprite.destroy();
         fish.label.destroy();
