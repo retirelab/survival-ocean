@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 
+const ROCK_BREAM_SPRITE =
+  'data:image/png;base64,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';
+
 interface ZoneConfig {
   id: number;
   name: string;
@@ -97,8 +100,6 @@ export class OceanScene extends Phaser.Scene {
   private zoneIndex = 0;
   private level = 1;
   private readonly maxLevel = 20;
-  private exp = 0;
-  private expToNext = 50;
   private bag: string[] = [];
   private readonly maxBag = 15;
   private readonly maxFishPerZone = 12;
@@ -114,6 +115,26 @@ export class OceanScene extends Phaser.Scene {
   private noticeText!: Phaser.GameObjects.Text;
   private noticeTimer = 0;
 
+  // 가상 조이스틱 & 터치 액션 버튼 (모바일/태블릿 멀티터치 대응)
+  private joyBase!: Phaser.GameObjects.Arc;
+  private joyThumb!: Phaser.GameObjects.Arc;
+  private joyLabel!: Phaser.GameObjects.Text;
+  private joyPointerId: number | null = null;
+  private joyCenter = { x: 96, y: 0 };
+  private joyVec = { x: 0, y: 0 };
+  private readonly joyRadius = 54;
+
+  private shootBtnBg!: Phaser.GameObjects.Arc;
+  private shootBtnText!: Phaser.GameObjects.Text;
+  private shootPointerId: number | null = null;
+  private shootHolding = false;
+
+  private collectBtnBg!: Phaser.GameObjects.Arc;
+  private collectBtnText!: Phaser.GameObjects.Text;
+
+  private tankBtnBg!: Phaser.GameObjects.Arc;
+  private tankBtnText!: Phaser.GameObjects.Text;
+
   private spawnTimer = 0;
   private shootCooldown = 0;
 
@@ -123,19 +144,24 @@ export class OceanScene extends Phaser.Scene {
 
   preload() {
     for (const [key, dataUrl] of Object.entries(FISH_SPRITES)) {
+      if (key === 'rock_bream') continue;
       if (!this.textures.exists(key)) {
         this.load.image(key, dataUrl);
       }
+    }
+    if (!this.textures.exists('rock_bream')) {
+      this.load.image('rock_bream', ROCK_BREAM_SPRITE);
     }
   }
 
   create() {
     const { width, height } = this.scale;
+    this.input.addPointer(3);
 
     this.bgGraphics = this.add.graphics();
     this.decoGraphics = this.add.graphics();
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 22; i++) {
       const bubble = this.add.circle(
         Phaser.Math.Between(16, width - 16),
         Phaser.Math.Between(40, height - 20),
@@ -167,94 +193,237 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.hudText = this.add
-      .text(12, 12, '', {
-        fontSize: '14px',
+      .text(14, 14, '', {
+        fontSize: '15px',
         color: '#f0f9ff',
         fontStyle: 'bold',
-        backgroundColor: 'rgba(2, 12, 23, 0.6)',
+        backgroundColor: 'rgba(2, 12, 23, 0.65)',
         padding: { x: 10, y: 6 },
       })
       .setDepth(30);
 
     this.bagText = this.add
-      .text(12, 46, '', {
+      .text(14, 48, '', {
         fontSize: '13px',
         color: '#fde047',
-        backgroundColor: 'rgba(2, 12, 23, 0.6)',
+        backgroundColor: 'rgba(2, 12, 23, 0.65)',
         padding: { x: 10, y: 5 },
       })
       .setDepth(30);
 
     this.noticeText = this.add
-      .text(width / 2, height - 98, '', {
+      .text(width / 2, height - 175, '', {
         fontSize: '14px',
         color: '#ffffff',
         fontStyle: 'bold',
         backgroundColor: 'rgba(15, 23, 42, 0.88)',
         padding: { x: 12, y: 8 },
         align: 'center',
-        wordWrap: { width: width - 40 },
+        wordWrap: { width: Math.max(260, width - 40) },
       })
       .setOrigin(0.5)
       .setDepth(40)
       .setVisible(false);
 
-    this.createActionButtons(width, height);
-    this.drawZoneBackdrop();
+    this.createControls();
+    this.setupMultiTouchInput();
+    this.layoutUI(width, height);
+
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+      this.layoutUI(gameSize.width, gameSize.height);
+    });
+
     this.spawnFishWave(6);
     this.updateHud();
   }
 
-  private createActionButtons(width: number, height: number) {
-    const btnY = height - 42;
+  private createControls() {
+    // 왼쪽 가상 조이스틱
+    this.joyBase = this.add
+      .circle(0, 0, this.joyRadius, 0x0f172a, 0.45)
+      .setStrokeStyle(3, 0x38bdf8, 0.75)
+      .setDepth(35);
 
-    const tankBtn = this.add
-      .text(width * 0.2, btnY, '🪣 수조 (T)', {
-        fontSize: '15px',
-        color: '#ffffff',
-        fontStyle: 'bold',
-        backgroundColor: '#0f766e',
-        padding: { x: 14, y: 10 },
+    this.joyThumb = this.add
+      .circle(0, 0, 24, 0x38bdf8, 0.85)
+      .setStrokeStyle(2, 0xe0f2fe, 0.95)
+      .setDepth(36);
+
+    this.joyLabel = this.add
+      .text(0, 0, '조이스틱', {
+        fontSize: '11px',
+        color: '#bae6fd',
       })
       .setOrigin(0.5)
-      .setDepth(35)
-      .setInteractive({ useHandCursor: true });
+      .setDepth(36);
 
-    tankBtn.on('pointerdown', () => {
-      this.emptyBagToTank();
-    });
+    // 오른쪽 터치 발사 버튼 (누르고 있으면 연속 발사)
+    this.shootBtnBg = this.add
+      .circle(0, 0, 42, 0x0284c7, 0.85)
+      .setStrokeStyle(3, 0x7dd3fc, 0.95)
+      .setDepth(35);
 
-    const shootBtn = this.add
-      .text(width * 0.52, btnY, '🔫 발사', {
-        fontSize: '15px',
+    this.shootBtnText = this.add
+      .text(0, 0, '🔫\n발사', {
+        fontSize: '14px',
         color: '#ffffff',
         fontStyle: 'bold',
-        backgroundColor: '#0284c7',
-        padding: { x: 16, y: 10 },
+        align: 'center',
       })
       .setOrigin(0.5)
-      .setDepth(35)
-      .setInteractive({ useHandCursor: true });
+      .setDepth(36);
 
-    shootBtn.on('pointerdown', () => {
-      this.fireBullet();
-    });
+    // 수집 버튼 (F)
+    this.collectBtnBg = this.add
+      .circle(0, 0, 32, 0xfacc15, 0.9)
+      .setStrokeStyle(2, 0xfef08a, 0.95)
+      .setDepth(35);
 
-    const collectBtn = this.add
-      .text(width * 0.82, btnY, 'F 수집', {
-        fontSize: '15px',
+    this.collectBtnText = this.add
+      .text(0, 0, 'F\n수집', {
+        fontSize: '12px',
         color: '#0f172a',
         fontStyle: 'bold',
-        backgroundColor: '#facc15',
-        padding: { x: 16, y: 10 },
+        align: 'center',
       })
       .setOrigin(0.5)
-      .setDepth(35)
-      .setInteractive({ useHandCursor: true });
+      .setDepth(36);
 
-    collectBtn.on('pointerdown', () => {
-      this.tryCollectNearbyFish();
+    // 수조 버튼 (T)
+    this.tankBtnBg = this.add
+      .circle(0, 0, 32, 0x0f766e, 0.9)
+      .setStrokeStyle(2, 0x5eead4, 0.95)
+      .setDepth(35);
+
+    this.tankBtnText = this.add
+      .text(0, 0, '🪣\n수조(T)', {
+        fontSize: '11px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(36);
+  }
+
+  private setupMultiTouchInput() {
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      const px = pointer.x;
+      const py = pointer.y;
+
+      // 1) 발사 버튼 체크
+      if (Phaser.Math.Distance.Between(px, py, this.shootBtnBg.x, this.shootBtnBg.y) <= 48) {
+        this.shootPointerId = pointer.id;
+        this.shootHolding = true;
+        this.shootBtnBg.setScale(0.92);
+        this.fireBullet();
+        return;
+      }
+
+      // 2) 수집 버튼 체크
+      if (Phaser.Math.Distance.Between(px, py, this.collectBtnBg.x, this.collectBtnBg.y) <= 38) {
+        this.collectBtnBg.setScale(0.9);
+        this.time.delayedCall(120, () => this.collectBtnBg.setScale(1));
+        this.tryCollectNearbyFish();
+        return;
+      }
+
+      // 3) 수조 버튼 체크
+      if (Phaser.Math.Distance.Between(px, py, this.tankBtnBg.x, this.tankBtnBg.y) <= 38) {
+        this.tankBtnBg.setScale(0.9);
+        this.time.delayedCall(120, () => this.tankBtnBg.setScale(1));
+        this.emptyBagToTank();
+        return;
+      }
+
+      // 4) 조이스틱 영역 (화면 왼쪽 절반 또는 조이스틱 근처 터치 시 작동)
+      const distToJoy = Phaser.Math.Distance.Between(px, py, this.joyCenter.x, this.joyCenter.y);
+      if (this.joyPointerId === null && (distToJoy <= this.joyRadius * 1.8 || px < this.scale.width * 0.5)) {
+        this.joyPointerId = pointer.id;
+        this.updateJoystick(px, py);
+      }
     });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.id === this.joyPointerId && pointer.isDown) {
+        this.updateJoystick(pointer.x, pointer.y);
+      }
+    });
+
+    const releasePointer = (pointer: Phaser.Input.Pointer) => {
+      if (pointer.id === this.joyPointerId) {
+        this.joyPointerId = null;
+        this.joyVec.x = 0;
+        this.joyVec.y = 0;
+        this.joyThumb.setPosition(this.joyCenter.x, this.joyCenter.y);
+      }
+      if (pointer.id === this.shootPointerId) {
+        this.shootPointerId = null;
+        this.shootHolding = false;
+        this.shootBtnBg.setScale(1);
+      }
+    };
+
+    this.input.on('pointerup', releasePointer);
+    this.input.on('pointerupoutside', releasePointer);
+  }
+
+  private updateJoystick(px: number, py: number) {
+    const dx = px - this.joyCenter.x;
+    const dy = py - this.joyCenter.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist <= 4) {
+      this.joyVec.x = 0;
+      this.joyVec.y = 0;
+      this.joyThumb.setPosition(this.joyCenter.x, this.joyCenter.y);
+      return;
+    }
+
+    const clamped = Math.min(dist, this.joyRadius);
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    this.joyThumb.setPosition(this.joyCenter.x + nx * clamped, this.joyCenter.y + ny * clamped);
+    const strength = clamped / this.joyRadius;
+    this.joyVec.x = nx * strength;
+    this.joyVec.y = ny * strength;
+  }
+
+  private layoutUI(width: number, height: number) {
+    this.drawZoneBackdrop();
+
+    // 조이스틱 위치 (좌측 하단)
+    const joyX = Math.max(76, Math.min(115, width * 0.2));
+    const joyY = height - 86;
+    this.joyCenter = { x: joyX, y: joyY };
+    this.joyBase.setPosition(joyX, joyY);
+    if (this.joyPointerId === null) {
+      this.joyThumb.setPosition(joyX, joyY);
+    }
+    this.joyLabel.setPosition(joyX, joyY + this.joyRadius + 14);
+
+    // 우측 하단 액션 버튼 클러스터 (발사 / 수집 / 수조)
+    const shootX = width - Math.max(66, Math.min(95, width * 0.16));
+    const shootY = height - 74;
+    this.shootBtnBg.setPosition(shootX, shootY);
+    this.shootBtnText.setPosition(shootX, shootY);
+
+    const collectX = shootX - 82;
+    const collectY = height - 62;
+    this.collectBtnBg.setPosition(collectX, collectY);
+    this.collectBtnText.setPosition(collectX, collectY);
+
+    const tankX = shootX - 18;
+    const tankY = shootY - 82;
+    this.tankBtnBg.setPosition(tankX, tankY);
+    this.tankBtnText.setPosition(tankX, tankY);
+
+    this.noticeText.setPosition(width / 2, height - 170);
+    this.noticeText.setWordWrapWidth(Math.max(260, width - 40));
+
+    this.player.x = Phaser.Math.Clamp(this.player.x, 24, width - 24);
+    this.player.y = Phaser.Math.Clamp(this.player.y, 24, height - 20);
   }
 
   private emptyBagToTank() {
@@ -267,7 +436,7 @@ export class OceanScene extends Phaser.Scene {
     if (count >= this.maxBag) {
       if (this.level < this.maxLevel) {
         this.level += 1;
-        this.showNotice(`가득 찬 가방(${count}마리)을 수조에 비워 레벨 업! ⭐ Lv.${this.level}/${this.maxLevel}/${this.maxLevel}`);
+        this.showNotice(`가득 찬 가방(${count}마리)을 수조에 비워 레벨 업! ⭐ Lv.${this.level}/${this.maxLevel}`);
       } else {
         this.showNotice(`최대 레벨(Lv.${this.maxLevel})이에요! 가방(${count}마리)을 수조에 비웠습니다.`);
       }
@@ -293,7 +462,8 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(zone.floorColor, 0.9);
       this.decoGraphics.fillRect(0, height - 22, width, 22);
       this.decoGraphics.fillStyle(0x22c55e, 0.8);
-      for (let x = 50; x < width - 40; x += 110) {
+      const step = Math.max(90, Math.floor(width / 5));
+      for (let x = 50; x < width - 40; x += step) {
         this.decoGraphics.fillRect(x, height - 56, 8, 34);
         this.decoGraphics.fillRect(x + 14, height - 48, 8, 26);
       }
@@ -301,10 +471,10 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(zone.floorColor, 0.9);
       this.decoGraphics.fillRect(0, height - 22, width, 22);
       this.decoGraphics.fillStyle(0xfacc15, 0.85);
-      this.decoGraphics.fillTriangle(70, height - 22, 95, height - 85, 120, height - 22);
-      this.decoGraphics.fillTriangle(350, height - 22, 380, height - 95, 410, height - 22);
+      this.decoGraphics.fillTriangle(width * 0.15, height - 22, width * 0.2, height - 85, width * 0.25, height - 22);
+      this.decoGraphics.fillTriangle(width * 0.72, height - 22, width * 0.78, height - 95, width * 0.84, height - 22);
       this.decoGraphics.fillStyle(0xf472b6, 0.85);
-      this.decoGraphics.fillCircle(230, height - 32, 16);
+      this.decoGraphics.fillCircle(width * 0.48, height - 32, 16);
     } else if (this.zoneIndex === 2) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.95);
       this.decoGraphics.fillRect(0, height - 20, width, 20);
@@ -360,11 +530,11 @@ export class OceanScene extends Phaser.Scene {
     const spec = Phaser.Utils.Array.GetRandom(available);
     const fromLeft = Math.random() < 0.5;
     const startX = initial
-      ? Phaser.Math.Between(50, width - 50)
+      ? Phaser.Math.Between(50, Math.max(100, width - 50))
       : fromLeft
         ? -45
         : width + 45;
-    const startY = Phaser.Math.Between(110, height - 120);
+    const startY = Phaser.Math.Between(100, Math.max(160, height - 150));
 
     let sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse;
     if (this.textures.exists(spec.key)) {
@@ -414,7 +584,7 @@ export class OceanScene extends Phaser.Scene {
       gfx,
       vx: this.facing * 520,
       vy: 0,
-      life: 1.4,
+      life: 1.5,
     });
   }
 
@@ -429,7 +599,7 @@ export class OceanScene extends Phaser.Scene {
       const fish = this.fishList[i];
       if (!fish.stunned) continue;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, fish.sprite.x, fish.sprite.y);
-      if (dist <= 72) {
+      if (dist <= 76) {
         this.bag.push(fish.spec.name);
         if (this.bag.length >= this.maxBag) {
           this.showNotice(`${fish.spec.name} 수집! 가방이 가득 찼으니 수조(T)에 비워 레벨업하세요!`);
@@ -448,16 +618,6 @@ export class OceanScene extends Phaser.Scene {
       this.showNotice('가까이에 기절한 물고기가 없어요! 총알로 먼저 기절시키세요.');
     }
     this.updateHud();
-  }
-
-  private gainExp(amount: number) {
-    this.exp += amount;
-    while (this.exp >= this.expToNext) {
-      this.exp -= this.expToNext;
-      this.level += 1;
-      this.expToNext = Math.round(this.expToNext * 1.15);
-      this.showNotice(`레벨 업! Lv.${this.level} 달성!`);
-    }
   }
 
   private damagePlayer(amount: number, attackerName: string) {
@@ -491,11 +651,11 @@ export class OceanScene extends Phaser.Scene {
 
   private updateHud() {
     const zone = ZONES[this.zoneIndex];
-    const ratio = Phaser.Math.Clamp((this.player.y - 30) / (this.scale.height - 60), 0, 1);
+    const ratio = Phaser.Math.Clamp((this.player.y - 30) / Math.max(1, this.scale.height - 60), 0, 1);
     const depth = Math.round(zone.minDepth + ratio * (zone.maxDepth - zone.minDepth));
 
     this.hudText.setText(
-      `🌊 ${zone.name}(${depth}m) | ⭐ Lv.${this.level} | ❤️ ${this.playerHp}/${this.maxHp}`
+      `🌊 ${zone.name}(${depth}m) | ⭐ Lv.${this.level}/${this.maxLevel} | ❤️ ${this.playerHp}/${this.maxHp}`
     );
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | 물고기: ${this.fishList.length}/${this.maxFishPerZone}`);
   }
@@ -505,6 +665,10 @@ export class OceanScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
+    if (this.shootHolding && this.shootCooldown <= 0) {
+      this.fireBullet();
+    }
+
     if (this.playerInvuln > 0) {
       this.playerInvuln -= dt;
       this.player.setAlpha(Math.floor(this.playerInvuln * 12) % 2 === 0 ? 0.45 : 1);
@@ -525,6 +689,7 @@ export class OceanScene extends Phaser.Scene {
       }
     }
 
+    // 키보드 + 가상 조이스틱 이동 결합
     let vx = 0;
     let vy = 0;
     if (this.cursors) {
@@ -534,28 +699,22 @@ export class OceanScene extends Phaser.Scene {
       if (this.cursors.down.isDown || this.wasd.down.isDown) vy += 1;
     }
 
-    const pointer = this.input.activePointer;
-    if (pointer.isDown && pointer.worldY < height - 85) {
-      const dx = pointer.worldX - this.player.x;
-      const dy = pointer.worldY - this.player.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 10) {
-        vx = dx / dist;
-        vy = dy / dist;
-      }
-    } else if (vx !== 0 || vy !== 0) {
+    if (vx !== 0 || vy !== 0) {
       const len = Math.hypot(vx, vy);
       vx /= len;
       vy /= len;
+    } else if (this.joyPointerId !== null) {
+      vx = this.joyVec.x;
+      vy = this.joyVec.y;
     }
 
     this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
 
-    if (vx < -0.1) {
+    if (vx < -0.08) {
       this.facing = -1;
       this.player.scaleX = -1;
-    } else if (vx > 0.1) {
+    } else if (vx > 0.08) {
       this.facing = 1;
       this.player.scaleX = 1;
     }
