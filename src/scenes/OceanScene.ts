@@ -46,9 +46,9 @@ interface BulletEntity {
 
 const ZONES: ZoneConfig[] = [
   { id: 0, name: '초심층', minDepth: 0, maxDepth: 100, reqLevel: 1, topColor: 0x38bdf8, bottomColor: 0x0369a1, floorColor: 0x1e3a8a },
-  { id: 1, name: '중심층', minDepth: 100, maxDepth: 200, reqLevel: 30, topColor: 0x0284c7, bottomColor: 0x1e3a8a, floorColor: 0x312e81 },
-  { id: 2, name: '심해', minDepth: 200, maxDepth: 300, reqLevel: 60, topColor: 0x1e1b4b, bottomColor: 0x0f172a, floorColor: 0x090d16 },
-  { id: 3, name: '지하세계', minDepth: 300, maxDepth: 400, reqLevel: 80, topColor: 0x0f172a, bottomColor: 0x042f2e, floorColor: 0x134e4a },
+  { id: 1, name: '중심층', minDepth: 100, maxDepth: 200, reqLevel: 5, topColor: 0x0284c7, bottomColor: 0x1e3a8a, floorColor: 0x312e81 },
+  { id: 2, name: '심해', minDepth: 200, maxDepth: 300, reqLevel: 10, topColor: 0x1e1b4b, bottomColor: 0x0f172a, floorColor: 0x090d16 },
+  { id: 3, name: '지하세계', minDepth: 300, maxDepth: 400, reqLevel: 18, topColor: 0x0f172a, bottomColor: 0x042f2e, floorColor: 0x134e4a },
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
@@ -96,6 +96,7 @@ export class OceanScene extends Phaser.Scene {
 
   private zoneIndex = 0;
   private level = 1;
+  private readonly maxLevel = 20;
   private exp = 0;
   private expToNext = 50;
   private bag: string[] = [];
@@ -264,8 +265,12 @@ export class OceanScene extends Phaser.Scene {
     const count = this.bag.length;
     this.bag = [];
     if (count >= this.maxBag) {
-      this.level += 1;
-      this.showNotice(`가득 찬 가방(${count}마리)을 수조에 비워 레벨 업! ⭐ Lv.${this.level}`);
+      if (this.level < this.maxLevel) {
+        this.level += 1;
+        this.showNotice(`가득 찬 가방(${count}마리)을 수조에 비워 레벨 업! ⭐ Lv.${this.level}/${this.maxLevel}/${this.maxLevel}`);
+      } else {
+        this.showNotice(`최대 레벨(Lv.${this.maxLevel})이에요! 가방(${count}마리)을 수조에 비웠습니다.`);
+      }
     } else {
       this.showNotice(`수조에 ${count}마리를 비웠어요! (15마리 가득 채워 비우면 Lv UP)`);
     }
