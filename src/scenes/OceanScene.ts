@@ -51,20 +51,20 @@ const ZONES: ZoneConfig[] = [
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
-  { key: 'tuna', name: '참다랑어', hp: 3, speed: 120, exp: 45, scale: 0.72 },
-  { key: 'salmon', name: '연어', hp: 2, speed: 105, exp: 30, scale: 0.68 },
-  { key: 'red_seabream', name: '참돔', hp: 2, speed: 95, exp: 28, scale: 0.68 },
-  { key: 'rock_bream', name: '돌돔', hp: 2, speed: 90, exp: 28, scale: 0.68 },
-  { key: 'trout', name: '송어', hp: 1, speed: 110, exp: 22, scale: 0.68 },
-  { key: 'shrimp', name: '흰다리새우', hp: 1, speed: 80, exp: 18, scale: 0.75 },
-  { key: 'flounder', name: '광어', hp: 2, speed: 75, exp: 25, scale: 0.7 },
-  { key: 'eel', name: '붕장어', hp: 2, speed: 115, exp: 32, scale: 0.7 },
+  { key: 'tuna', name: '참다랑어', hp: 3, speed: 105, exp: 45, scale: 0.62 },
+  { key: 'salmon', name: '연어', hp: 2, speed: 95, exp: 30, scale: 0.6 },
+  { key: 'red_seabream', name: '참돔', hp: 2, speed: 85, exp: 28, scale: 0.6 },
+  { key: 'rock_bream', name: '돌돔', hp: 2, speed: 80, exp: 28, scale: 0.6 },
+  { key: 'trout', name: '송어', hp: 1, speed: 100, exp: 22, scale: 0.6 },
+  { key: 'shrimp', name: '흰다리새우', hp: 1, speed: 75, exp: 18, scale: 0.68 },
+  { key: 'flounder', name: '광어', hp: 2, speed: 70, exp: 25, scale: 0.62 },
+  { key: 'eel', name: '붕장어', hp: 2, speed: 100, exp: 32, scale: 0.62 },
 ];
 
 export class OceanScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Container;
   private facing = 1;
-  private speed = 240;
+  private speed = 250;
   private readonly bulletDamage = 1;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -122,9 +122,9 @@ export class OceanScene extends Phaser.Scene {
     this.bgGraphics = this.add.graphics();
     this.decoGraphics = this.add.graphics();
 
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 20; i++) {
       const bubble = this.add.circle(
-        Phaser.Math.Between(20, width - 20),
+        Phaser.Math.Between(16, width - 16),
         Phaser.Math.Between(40, height - 20),
         Phaser.Math.Between(2, 5),
         0xbae6fd,
@@ -133,7 +133,7 @@ export class OceanScene extends Phaser.Scene {
       this.bubbles.push(bubble);
     }
 
-    this.player = this.add.container(width / 2, 120);
+    this.player = this.add.container(width / 2, 160);
     const body = this.add.circle(0, 0, 18, 0xfacc15);
     const visor = this.add.rectangle(9, -3, 13, 9, 0x38bdf8);
     const tank = this.add.rectangle(-14, 0, 8, 16, 0x0284c7);
@@ -154,31 +154,33 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.hudText = this.add
-      .text(16, 14, '', {
-        fontSize: '16px',
+      .text(12, 12, '', {
+        fontSize: '14px',
         color: '#f0f9ff',
         fontStyle: 'bold',
-        backgroundColor: 'rgba(2, 12, 23, 0.55)',
+        backgroundColor: 'rgba(2, 12, 23, 0.6)',
         padding: { x: 10, y: 6 },
       })
       .setDepth(30);
 
     this.bagText = this.add
-      .text(16, 52, '', {
-        fontSize: '14px',
+      .text(12, 46, '', {
+        fontSize: '13px',
         color: '#fde047',
-        backgroundColor: 'rgba(2, 12, 23, 0.55)',
+        backgroundColor: 'rgba(2, 12, 23, 0.6)',
         padding: { x: 10, y: 5 },
       })
       .setDepth(30);
 
     this.noticeText = this.add
-      .text(width / 2, height - 48, '', {
-        fontSize: '15px',
+      .text(width / 2, height - 98, '', {
+        fontSize: '14px',
         color: '#ffffff',
         fontStyle: 'bold',
-        backgroundColor: 'rgba(15, 23, 42, 0.85)',
-        padding: { x: 14, y: 8 },
+        backgroundColor: 'rgba(15, 23, 42, 0.88)',
+        padding: { x: 12, y: 8 },
+        align: 'center',
+        wordWrap: { width: width - 40 },
       })
       .setOrigin(0.5)
       .setDepth(40)
@@ -191,13 +193,15 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private createActionButtons(width: number, height: number) {
+    const btnY = height - 42;
+
     const tankBtn = this.add
-      .text(width - 248, height - 48, '🪣 수조 (T)', {
+      .text(width * 0.2, btnY, '🪣 수조 (T)', {
         fontSize: '15px',
         color: '#ffffff',
         fontStyle: 'bold',
         backgroundColor: '#0f766e',
-        padding: { x: 12, y: 10 },
+        padding: { x: 14, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(35)
@@ -208,12 +212,12 @@ export class OceanScene extends Phaser.Scene {
     });
 
     const shootBtn = this.add
-      .text(width - 144, height - 48, '🔫 발사', {
+      .text(width * 0.52, btnY, '🔫 발사', {
         fontSize: '15px',
         color: '#ffffff',
         fontStyle: 'bold',
         backgroundColor: '#0284c7',
-        padding: { x: 12, y: 10 },
+        padding: { x: 16, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(35)
@@ -224,12 +228,12 @@ export class OceanScene extends Phaser.Scene {
     });
 
     const collectBtn = this.add
-      .text(width - 54, height - 48, 'F 수집', {
+      .text(width * 0.82, btnY, 'F 수집', {
         fontSize: '15px',
         color: '#0f172a',
         fontStyle: 'bold',
         backgroundColor: '#facc15',
-        padding: { x: 12, y: 10 },
+        padding: { x: 16, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(35)
@@ -267,7 +271,7 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(zone.floorColor, 0.9);
       this.decoGraphics.fillRect(0, height - 22, width, 22);
       this.decoGraphics.fillStyle(0x22c55e, 0.8);
-      for (let x = 90; x < width - 80; x += 140) {
+      for (let x = 50; x < width - 40; x += 110) {
         this.decoGraphics.fillRect(x, height - 56, 8, 34);
         this.decoGraphics.fillRect(x + 14, height - 48, 8, 26);
       }
@@ -275,10 +279,10 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(zone.floorColor, 0.9);
       this.decoGraphics.fillRect(0, height - 22, width, 22);
       this.decoGraphics.fillStyle(0xfacc15, 0.85);
-      this.decoGraphics.fillTriangle(140, height - 22, 165, height - 85, 190, height - 22);
-      this.decoGraphics.fillTriangle(620, height - 22, 650, height - 95, 680, height - 22);
+      this.decoGraphics.fillTriangle(70, height - 22, 95, height - 85, 120, height - 22);
+      this.decoGraphics.fillTriangle(350, height - 22, 380, height - 95, 410, height - 22);
       this.decoGraphics.fillStyle(0xf472b6, 0.85);
-      this.decoGraphics.fillCircle(390, height - 32, 16);
+      this.decoGraphics.fillCircle(230, height - 32, 16);
     } else if (this.zoneIndex === 2) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.95);
       this.decoGraphics.fillRect(0, height - 20, width, 20);
@@ -286,7 +290,7 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillStyle(zone.floorColor, 1);
       this.decoGraphics.fillRect(0, height - 36, width, 36);
       this.decoGraphics.fillStyle(0xef4444, 0.9);
-      this.decoGraphics.fillCircle(width - 60, height - 24, 12);
+      this.decoGraphics.fillCircle(width - 50, height - 24, 12);
     }
   }
 
@@ -323,11 +327,11 @@ export class OceanScene extends Phaser.Scene {
     const spec = Phaser.Utils.Array.GetRandom(SHALLOW_FISH);
     const fromLeft = Math.random() < 0.5;
     const startX = initial
-      ? Phaser.Math.Between(60, width - 60)
+      ? Phaser.Math.Between(50, width - 50)
       : fromLeft
         ? -45
         : width + 45;
-    const startY = Phaser.Math.Between(95, height - 75);
+    const startY = Phaser.Math.Between(110, height - 120);
 
     let sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse;
     if (this.textures.exists(spec.key)) {
@@ -336,12 +340,12 @@ export class OceanScene extends Phaser.Scene {
       img.setFlipX(!fromLeft);
       sprite = img;
     } else {
-      sprite = this.add.ellipse(startX, startY, 64, 30, 0xfb923c);
+      sprite = this.add.ellipse(startX, startY, 56, 26, 0xfb923c);
     }
     sprite.setDepth(5);
 
     const label = this.add
-      .text(startX, startY - 34, this.formatFishLabel({ spec, hp: spec.hp, stunned: false }), {
+      .text(startX, startY - 30, this.formatFishLabel({ spec, hp: spec.hp, stunned: false }), {
         fontSize: '11px',
         color: '#e0f2fe',
         backgroundColor: 'rgba(2, 12, 23, 0.6)',
@@ -376,7 +380,7 @@ export class OceanScene extends Phaser.Scene {
       gfx,
       vx: this.facing * 520,
       vy: 0,
-      life: 1.6,
+      life: 1.4,
     });
   }
 
@@ -441,7 +445,7 @@ export class OceanScene extends Phaser.Scene {
     this.hudText.setText(
       `🌊 ${zone.name} (${depth}m) | ⭐ Lv.${this.level} (${this.exp}/${this.expToNext})`
     );
-    this.bagText.setText(`🎒 물고기 가방: ${this.bag.length} / ${this.maxBag}마리 | 현재 물고기: ${this.fishList.length}/25`);
+    this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | 물고기: ${this.fishList.length}/25`);
   }
 
   update(_time: number, delta: number) {
@@ -458,7 +462,7 @@ export class OceanScene extends Phaser.Scene {
       bubble.y -= 35 * dt;
       if (bubble.y < -10) {
         bubble.y = height + 10;
-        bubble.x = Phaser.Math.Between(20, width - 20);
+        bubble.x = Phaser.Math.Between(16, width - 16);
       }
     }
 
@@ -472,7 +476,7 @@ export class OceanScene extends Phaser.Scene {
     }
 
     const pointer = this.input.activePointer;
-    if (pointer.isDown && pointer.worldY < height - 90) {
+    if (pointer.isDown && pointer.worldY < height - 85) {
       const dx = pointer.worldX - this.player.x;
       const dy = pointer.worldY - this.player.y;
       const dist = Math.hypot(dx, dy);
@@ -586,7 +590,7 @@ export class OceanScene extends Phaser.Scene {
           if ('setFlipX' in fish.sprite) fish.sprite.setFlipX(true);
         }
       }
-      fish.label.setPosition(fish.sprite.x, fish.sprite.y - 34);
+      fish.label.setPosition(fish.sprite.x, fish.sprite.y - 30);
     }
 
     this.updateHud();
