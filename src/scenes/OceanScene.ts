@@ -115,6 +115,7 @@ const UPGRADE_TITLES = [
 export class OceanScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Container;
   private facing = 1;
+  private aimDirection = { x: 1, y: 0 };
   private speed = 250;
   private readonly bulletDamage = 1;
   private attackMultiplier = 1;
@@ -1426,14 +1427,19 @@ export class OceanScene extends Phaser.Scene {
     this.shootCooldown = 0.22 / this.rapidFireMultiplier;
     this.audio.playShoot();
 
-    const gfx = this.add.circle(this.player.x + this.facing * 22, this.player.y, 6, 0x38bdf8);
+    const gfx = this.add.circle(
+      this.player.x + this.aimDirection.x * 22,
+      this.player.y + this.aimDirection.y * 22,
+      6,
+      0x38bdf8
+    );
     gfx.setStrokeStyle(2, 0xe0f2fe);
     gfx.setDepth(8);
 
     this.bullets.push({
       gfx,
-      vx: this.facing * 520 * this.bulletSpeedMultiplier,
-      vy: 0,
+      vx: this.aimDirection.x * 520 * this.bulletSpeedMultiplier,
+      vy: this.aimDirection.y * 520 * this.bulletSpeedMultiplier,
       life: 1.5,
     });
   }
@@ -1616,6 +1622,12 @@ export class OceanScene extends Phaser.Scene {
       vy = this.joyVec.y;
     }
 
+    const aimLength = Math.hypot(vx, vy);
+    if (aimLength > 0.08) {
+      this.aimDirection.x = vx / aimLength;
+      this.aimDirection.y = vy / aimLength;
+    }
+
     this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
 
@@ -1714,7 +1726,14 @@ export class OceanScene extends Phaser.Scene {
         }
       }
 
-      if (hit || b.life <= 0 || b.gfx.x < -20 || b.gfx.x > width + 20) {
+      if (
+        hit ||
+        b.life <= 0 ||
+        b.gfx.x < -20 ||
+        b.gfx.x > width + 20 ||
+        b.gfx.y < -20 ||
+        b.gfx.y > height + 20
+      ) {
         b.gfx.destroy();
         this.bullets.splice(i, 1);
       }
