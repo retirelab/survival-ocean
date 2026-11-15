@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 
+const ROCK_BREAM_SPRITE =
+  'data:image/png;base64,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';
+
 interface ZoneConfig {
   id: number;
   name: string;
@@ -62,6 +65,7 @@ export class OceanScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Container;
   private facing = 1;
   private speed = 240;
+  private readonly bulletDamage = 1;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: {
@@ -72,6 +76,7 @@ export class OceanScene extends Phaser.Scene {
   };
   private keySpace!: Phaser.Input.Keyboard.Key;
   private keyF!: Phaser.Input.Keyboard.Key;
+  private keyT!: Phaser.Input.Keyboard.Key;
 
   private zoneIndex = 0;
   private level = 1;
@@ -101,9 +106,13 @@ export class OceanScene extends Phaser.Scene {
 
   preload() {
     for (const [key, dataUrl] of Object.entries(FISH_SPRITES)) {
+      if (key === 'rock_bream') continue;
       if (!this.textures.exists(key)) {
         this.load.image(key, dataUrl);
       }
+    }
+    if (!this.textures.exists('rock_bream')) {
+      this.load.image('rock_bream', ROCK_BREAM_SPRITE);
     }
   }
 
@@ -141,6 +150,7 @@ export class OceanScene extends Phaser.Scene {
       };
       this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+      this.keyT = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
     }
 
     this.hudText = this.add
@@ -174,20 +184,36 @@ export class OceanScene extends Phaser.Scene {
       .setDepth(40)
       .setVisible(false);
 
-    this.createMobileButtons(width, height);
+    this.createActionButtons(width, height);
     this.drawZoneBackdrop();
     this.spawnFishWave(6);
     this.updateHud();
   }
 
-  private createMobileButtons(width: number, height: number) {
+  private createActionButtons(width: number, height: number) {
+    const tankBtn = this.add
+      .text(width - 248, height - 48, '🪣 수조 (T)', {
+        fontSize: '15px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: '#0f766e',
+        padding: { x: 12, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setDepth(35)
+      .setInteractive({ useHandCursor: true });
+
+    tankBtn.on('pointerdown', () => {
+      this.emptyBagToTank();
+    });
+
     const shootBtn = this.add
-      .text(width - 150, height - 48, '🔫 발사', {
-        fontSize: '16px',
+      .text(width - 144, height - 48, '🔫 발사', {
+        fontSize: '15px',
         color: '#ffffff',
         fontStyle: 'bold',
         backgroundColor: '#0284c7',
-        padding: { x: 14, y: 10 },
+        padding: { x: 12, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(35)
@@ -198,12 +224,12 @@ export class OceanScene extends Phaser.Scene {
     });
 
     const collectBtn = this.add
-      .text(width - 56, height - 48, 'F 수집', {
-        fontSize: '16px',
+      .text(width - 54, height - 48, 'F 수집', {
+        fontSize: '15px',
         color: '#0f172a',
         fontStyle: 'bold',
         backgroundColor: '#facc15',
-        padding: { x: 14, y: 10 },
+        padding: { x: 12, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(35)
@@ -212,6 +238,17 @@ export class OceanScene extends Phaser.Scene {
     collectBtn.on('pointerdown', () => {
       this.tryCollectNearbyFish();
     });
+  }
+
+  private emptyBagToTank() {
+    if (this.bag.length === 0) {
+      this.showNotice('가방이 이미 비어 있어요!');
+      return;
+    }
+    const count = this.bag.length;
+    this.bag = [];
+    this.showNotice(`수조에 물고기 ${count}마리를 옮겨 가방을 비웠어요!`);
+    this.updateHud();
   }
 
   private drawZoneBackdrop() {
@@ -259,6 +296,13 @@ export class OceanScene extends Phaser.Scene {
     this.noticeTimer = 2.2;
   }
 
+  private formatFishLabel(fish: { spec: FishSpec; hp: number; stunned: boolean }): string {
+    if (fish.stunned) {
+      return `💫 ${fish.spec.name} (F 수집)`;
+    }
+    return `${fish.spec.name} ❤️${fish.hp}/${fish.spec.hp}`;
+  }
+
   private spawnFishWave(count: number) {
     for (let i = 0; i < count; i++) {
       this.spawnOneFish(true);
@@ -297,11 +341,11 @@ export class OceanScene extends Phaser.Scene {
     sprite.setDepth(5);
 
     const label = this.add
-      .text(startX, startY - 34, spec.name, {
+      .text(startX, startY - 34, this.formatFishLabel({ spec, hp: spec.hp, stunned: false }), {
         fontSize: '11px',
         color: '#e0f2fe',
-        backgroundColor: 'rgba(2, 12, 23, 0.5)',
-        padding: { x: 4, y: 2 },
+        backgroundColor: 'rgba(2, 12, 23, 0.6)',
+        padding: { x: 5, y: 2 },
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -338,7 +382,7 @@ export class OceanScene extends Phaser.Scene {
 
   private tryCollectNearbyFish() {
     if (this.bag.length >= this.maxBag) {
-      this.showNotice('가방이 15마리로 가득 찼어요! 초심층 맨 위(0m)로 올라가 비우세요.');
+      this.showNotice('가방이 15마리로 가득 찼어요! 수조 버튼(T)을 눌러 가방을 비우세요.');
       return;
     }
 
@@ -459,11 +503,8 @@ export class OceanScene extends Phaser.Scene {
     if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
       this.tryCollectNearbyFish();
     }
-
-    if (this.zoneIndex === 0 && this.player.y <= 34 && this.bag.length > 0) {
-      const count = this.bag.length;
-      this.bag = [];
-      this.showNotice(`수면에서 물고기 ${count}마리를 정리하고 가방을 비웠어요!`);
+    if (this.keyT && Phaser.Input.Keyboard.JustDown(this.keyT)) {
+      this.emptyBagToTank();
     }
 
     if (this.player.y >= height - 22 && this.zoneIndex < ZONES.length - 1) {
@@ -498,7 +539,7 @@ export class OceanScene extends Phaser.Scene {
       for (const fish of this.fishList) {
         if (fish.stunned) continue;
         if (Phaser.Math.Distance.Between(b.gfx.x, b.gfx.y, fish.sprite.x, fish.sprite.y) < 36) {
-          fish.hp -= 1;
+          fish.hp = Math.max(0, fish.hp - this.bulletDamage);
           hit = true;
           if (fish.hp <= 0) {
             fish.stunned = true;
@@ -507,8 +548,8 @@ export class OceanScene extends Phaser.Scene {
               fish.sprite.setTint(0x94a3b8);
             }
             fish.sprite.setAngle(180);
-            fish.label.setText(`💫 ${fish.spec.name} (F 수집)`);
           }
+          fish.label.setText(this.formatFishLabel(fish));
           break;
         }
       }
@@ -530,7 +571,7 @@ export class OceanScene extends Phaser.Scene {
             fish.sprite.clearTint();
           }
           fish.sprite.setAngle(0);
-          fish.label.setText(fish.spec.name);
+          fish.label.setText(this.formatFishLabel(fish));
         }
       } else {
         fish.phase += dt * 2.5;
