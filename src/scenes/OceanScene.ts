@@ -191,6 +191,9 @@ export class OceanScene extends Phaser.Scene {
   private noticeText!: Phaser.GameObjects.Text;
   private noticeTimer = 0;
   private aiming = false;
+  private touchAimEnabled = false;
+  private aimBtnBg!: Phaser.GameObjects.Arc;
+  private aimBtnText!: Phaser.GameObjects.Text;
   private aimLockedUntilRelease = false;
   private aimGraphics!: Phaser.GameObjects.Graphics;
   private aimText!: Phaser.GameObjects.Text;
@@ -388,7 +391,7 @@ export class OceanScene extends Phaser.Scene {
 
     this.aimGraphics = this.add.graphics().setDepth(34).setVisible(false);
     this.aimText = this.add
-      .text(0, 0, '🎯 조준 중 · 방향키/WASD · 발사하면 해제', {
+      .text(0, 0, '🎯 조준 중 · 조이스틱/방향키 · 발사하면 해제', {
         fontSize: '13px',
         color: '#fef08a',
         fontStyle: 'bold',
@@ -468,6 +471,8 @@ export class OceanScene extends Phaser.Scene {
     this.joyThumb?.setPosition(this.joyCenter.x, this.joyCenter.y);
     this.shootBtnBg?.setScale(1);
     this.input.keyboard?.resetKeys();
+    this.touchAimEnabled = false;
+    this.aimLockedUntilRelease = false;
     this.setAiming(false);
   }
 
@@ -578,6 +583,14 @@ export class OceanScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(36);
 
+    // 한 번 터치해 조준하고, 조이스틱으로 방향을 바꾼 뒤 발사합니다.
+    this.aimBtnBg = this.add.circle(0, 0, 30, 0x334155, 0.95)
+      .setStrokeStyle(2, 0xfde047, 0.95)
+      .setDepth(35);
+    this.aimBtnText = this.add.text(0, 0, '🎯\n조준', {
+      fontSize: '12px', color: '#fef08a', fontStyle: 'bold', align: 'center',
+    }).setOrigin(0.5).setDepth(36);
+
     // 수집 버튼 (F)
     this.collectBtnBg = this.add
       .circle(0, 0, 32, 0xfacc15, 0.9)
@@ -651,6 +664,11 @@ export class OceanScene extends Phaser.Scene {
         if (this.time.now < this.menuInputLockedUntil) return;
         const target = this.menuTargets.find((item) => item.bounds.contains(px, py));
         target?.action();
+        return;
+      }
+
+      if (Phaser.Math.Distance.Between(px, py, this.aimBtnBg.x, this.aimBtnBg.y) <= 34) {
+        this.toggleTouchAim();
         return;
       }
 
@@ -750,9 +768,29 @@ export class OceanScene extends Phaser.Scene {
     this.joyVec.y = ny * strength;
   }
 
+  private toggleTouchAim() {
+    this.touchAimEnabled = !this.touchAimEnabled;
+    // 조준을 켤 때 연사 중이던 손가락은 놓은 것으로 처리합니다.
+    // 다음 발사 터치 전까지 정밀 사격이 자동으로 나가지 않게 합니다.
+    if (this.touchAimEnabled) {
+      this.shootPointerId = null;
+      this.shootHolding = false;
+      this.shootBtnBg.setScale(1);
+    }
+    this.updateAimingInput();
+  }
+
+  private updateAimingInput() {
+    const zDown = Boolean(this.keyZ?.isDown);
+    if (!zDown) this.aimLockedUntilRelease = false;
+    this.setAiming(this.touchAimEnabled || (zDown && !this.aimLockedUntilRelease));
+  }
+
   private setAiming(active: boolean) {
     if (this.aiming === active) return;
     this.aiming = active;
+    this.aimBtnBg?.setFillStyle(active ? 0xa16207 : 0x334155, 0.95);
+    this.aimBtnText?.setText(active ? '🎯\n조준 중' : '🎯\n조준');
     const timeScale = active ? 0.25 : 1;
     this.tweens.timeScale = timeScale;
     this.time.timeScale = timeScale;
@@ -763,6 +801,7 @@ export class OceanScene extends Phaser.Scene {
 
   private releaseAimAfterShot() {
     if (!this.aiming) return;
+    this.touchAimEnabled = false;
     this.aimLockedUntilRelease = true;
     this.setAiming(false);
   }
@@ -1075,6 +1114,11 @@ export class OceanScene extends Phaser.Scene {
     const tankY = shootY - 82;
     this.tankBtnBg.setPosition(tankX, tankY);
     this.tankBtnText.setPosition(tankX, tankY);
+
+    const aimX = shootX + 6;
+    const aimY = shootY - 164;
+    this.aimBtnBg.setPosition(aimX, aimY);
+    this.aimBtnText.setPosition(aimX, aimY);
 
     const harvestX = width / 2;
     const harvestY = height - 82;
@@ -2023,7 +2067,7 @@ export class OceanScene extends Phaser.Scene {
     const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
     const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
     this.statsText.setText(
-      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}  🎯 Z 조준`
+      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
     );
     const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
     const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
@@ -2051,9 +2095,7 @@ export class OceanScene extends Phaser.Scene {
       return;
     }
 
-    const zDown = Boolean(this.keyZ?.isDown);
-    if (!zDown) this.aimLockedUntilRelease = false;
-    this.setAiming(zDown && !this.aimLockedUntilRelease);
+    this.updateAimingInput();
     const dt = rawDt * (this.aiming ? 0.25 : 1);
     this.updateOreRespawns(rawDt);
 

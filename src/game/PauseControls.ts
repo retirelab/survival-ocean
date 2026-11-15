@@ -17,7 +17,7 @@ export class PauseControls {
   constructor(private handlers: { pause: () => void; resume: () => void; save: () => boolean }) {
     this.root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:10;font-family:system-ui,sans-serif;color:white';
     this.pauseButton = this.button('⏸ 일시정지', () => this.pause());
-    this.pauseButton.style.cssText += ';position:absolute;right:12px;top:max(146px,env(safe-area-inset-top));pointer-events:auto';
+    this.pauseButton.style.cssText += ';position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));pointer-events:auto';
     this.panel.style.cssText = 'position:absolute;inset:0;background:rgba(2,6,23,.92);display:none;align-items:center;justify-content:center;pointer-events:auto;padding:16px;box-sizing:border-box';
     this.panel.setAttribute('role', 'dialog');
     this.panel.setAttribute('aria-modal', 'true');
