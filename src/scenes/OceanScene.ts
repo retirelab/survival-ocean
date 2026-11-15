@@ -161,6 +161,7 @@ export class OceanScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     this.input.addPointer(3);
+    this.audio.setZone(this.zoneIndex);
 
     this.bgGraphics = this.add.graphics();
     this.decoGraphics = this.add.graphics();
@@ -667,6 +668,7 @@ export class OceanScene extends Phaser.Scene {
     }
     this.fishList = [];
     this.zoneIndex = nextIndex;
+    this.audio.setZone(this.zoneIndex);
     if (playSound) {
       this.audio.playZoneChange(nextIndex > previousZoneIndex);
     }

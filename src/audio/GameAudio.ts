@@ -10,6 +10,14 @@ export class GameAudio {
   private ambientNoise: AudioBufferSourceNode | null = null;
   private ambientDrone: OscillatorNode | null = null;
   private ambientLfo: OscillatorNode | null = null;
+  private ambienceGain: GainNode | null = null;
+  private ambienceFilter: BiquadFilterNode | null = null;
+  private musicBus: GainNode | null = null;
+  private musicNoiseBuffer: AudioBuffer | null = null;
+  private musicTimer: number | null = null;
+  private nextMusicStep = 0;
+  private musicStep = 0;
+  private zoneIndex = 0;
   private muted = false;
   private readonly lastPlayed = new Map<string, number>();
 
@@ -24,10 +32,35 @@ export class GameAudio {
       this.master.gain.value = this.muted ? 0 : 0.32;
       this.master.connect(this.context.destination);
       this.startAmbience();
+      this.startMusic();
     }
 
     if (this.context.state === 'suspended') {
       void this.context.resume();
+    }
+  }
+
+  setZone(zoneIndex: number) {
+    const nextZone = Math.max(0, Math.min(3, Math.round(zoneIndex)));
+    const changed = nextZone !== this.zoneIndex;
+    this.zoneIndex = nextZone;
+
+    const context = this.context;
+    if (!context) return;
+    this.applyZoneAtmosphere();
+
+    if (changed && this.musicBus) {
+      const now = context.currentTime;
+      const targetVolume = this.getMusicVolume(nextZone);
+      this.musicBus.gain.cancelScheduledValues(now);
+      this.musicBus.gain.setValueAtTime(
+        Math.max(0.0001, this.musicBus.gain.value),
+        now
+      );
+      this.musicBus.gain.linearRampToValueAtTime(0.0001, now + 0.2);
+      this.musicBus.gain.linearRampToValueAtTime(targetVolume, now + 1.1);
+      this.musicStep = 0;
+      this.nextMusicStep = now + 0.24;
     }
   }
 
@@ -110,12 +143,20 @@ export class GameAudio {
   }
 
   destroy() {
+    if (this.musicTimer !== null) {
+      window.clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
     this.stopNode(this.ambientNoise);
     this.stopNode(this.ambientDrone);
     this.stopNode(this.ambientLfo);
     this.ambientNoise = null;
     this.ambientDrone = null;
     this.ambientLfo = null;
+    this.ambienceGain = null;
+    this.ambienceFilter = null;
+    this.musicBus = null;
+    this.musicNoiseBuffer = null;
 
     if (this.context && this.context.state !== 'closed') {
       void this.context.close();
@@ -177,6 +218,283 @@ export class GameAudio {
     this.ambientNoise = noise;
     this.ambientDrone = drone;
     this.ambientLfo = lfo;
+    this.ambienceGain = ambienceGain;
+    this.ambienceFilter = filter;
+    this.applyZoneAtmosphere();
+  }
+
+  private applyZoneAtmosphere() {
+    const context = this.context;
+    if (!context) return;
+
+    const zoneSettings = [
+      { noise: 0.032, cutoff: 900, drone: 65.41 },
+      { noise: 0.042, cutoff: 650, drone: 55 },
+      { noise: 0.058, cutoff: 390, drone: 43.65 },
+      { noise: 0.074, cutoff: 240, drone: 36.71 },
+    ][this.zoneIndex];
+    const now = context.currentTime;
+
+    this.ambienceGain?.gain.setTargetAtTime(zoneSettings.noise, now, 0.7);
+    this.ambienceFilter?.frequency.setTargetAtTime(
+      zoneSettings.cutoff,
+      now,
+      0.8
+    );
+    this.ambientDrone?.frequency.setTargetAtTime(
+      zoneSettings.drone,
+      now,
+      0.8
+    );
+  }
+
+  private startMusic() {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || this.musicBus) return;
+
+    const musicBus = context.createGain();
+    musicBus.gain.value = this.getMusicVolume(this.zoneIndex);
+    musicBus.connect(master);
+    this.musicBus = musicBus;
+
+    const noiseBuffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      noiseData[i] = Math.random() * 2 - 1;
+    }
+    this.musicNoiseBuffer = noiseBuffer;
+
+    this.musicStep = 0;
+    this.nextMusicStep = context.currentTime + 0.08;
+    this.scheduleMusic();
+    this.musicTimer = window.setInterval(() => this.scheduleMusic(), 80);
+  }
+
+  private scheduleMusic() {
+    const context = this.context;
+    if (!context || !this.musicBus || context.state !== 'running') return;
+
+    const now = context.currentTime;
+    if (this.nextMusicStep < now - 0.5) {
+      this.nextMusicStep = now + 0.05;
+      this.musicStep = 0;
+    }
+
+    const stepDuration = 30 / this.getBpm(this.zoneIndex);
+    while (this.nextMusicStep < now + 0.35) {
+      this.scheduleZoneMusic(
+        this.zoneIndex,
+        this.musicStep,
+        this.nextMusicStep,
+        stepDuration
+      );
+      this.musicStep += 1;
+      this.nextMusicStep += stepDuration;
+    }
+  }
+
+  private scheduleZoneMusic(
+    zone: number,
+    step: number,
+    start: number,
+    stepDuration: number
+  ) {
+    if (zone === 0) {
+      this.scheduleShallowMusic(step, start, stepDuration);
+    } else if (zone === 1) {
+      this.scheduleMidMusic(step, start, stepDuration);
+    } else if (zone === 2) {
+      this.scheduleDeepMusic(step, start, stepDuration);
+    } else {
+      this.scheduleHorrorMusic(step, start, stepDuration);
+    }
+  }
+
+  private scheduleShallowMusic(step: number, start: number, unit: number) {
+    const melody: Array<number | null> = [
+      72, null, 76, 79, 76, 74, 72, null,
+      74, null, 77, 81, 79, 77, 76, 74,
+    ];
+    const roots = [48, 53, 45, 55];
+    const position = step % 16;
+    const chordPosition = step % 8;
+    const root = roots[Math.floor(step / 8) % roots.length];
+    const note = melody[position];
+
+    if (note !== null) {
+      this.musicNote(note, unit * 0.82, start, 'triangle', 0.115, 0.012, 2600);
+    }
+    if (chordPosition === 0) {
+      for (const interval of [0, 4, 7]) {
+        this.musicNote(root + 12 + interval, unit * 7.2, start, 'sine', 0.032, 0.08, 1800);
+      }
+    }
+    if (chordPosition === 0 || chordPosition === 4) {
+      this.musicNote(root, unit * 1.8, start, 'sine', 0.085, 0.02, 900);
+    }
+    if (position % 2 === 0) {
+      this.musicNoise(start, 0.035, 0.012, 4200);
+    }
+  }
+
+  private scheduleMidMusic(step: number, start: number, unit: number) {
+    const melody: Array<number | null> = [
+      69, null, 72, 74, 76, 74, 72, null,
+      67, null, 69, 72, 74, 76, 79, 76,
+    ];
+    const roots = [45, 48, 43, 47];
+    const position = step % 16;
+    const chordPosition = step % 8;
+    const root = roots[Math.floor(step / 8) % roots.length];
+    const note = melody[position];
+
+    if (note !== null) {
+      this.musicNote(note, unit * 0.9, start, 'triangle', 0.105, 0.015, 1900);
+    }
+    if (chordPosition === 0) {
+      for (const interval of [0, 3, 7]) {
+        this.musicNote(root + 12 + interval, unit * 7.3, start, 'triangle', 0.038, 0.12, 1250);
+      }
+    }
+    if (chordPosition === 0 || chordPosition === 4) {
+      this.musicNote(root, unit * 2.6, start, 'sawtooth', 0.07, 0.03, 620);
+      this.musicNote(root + 7, unit * 0.65, start + unit * 0.5, 'sine', 0.05, 0.01, 1200);
+    }
+    if (position === 0 || position === 4 || position === 8 || position === 12) {
+      this.musicNoise(start, 0.09, 0.022, 720);
+    }
+  }
+
+  private scheduleDeepMusic(step: number, start: number, unit: number) {
+    const roots = [38, 34, 36, 33];
+    const leadNotes = [62, 65, 69, 68];
+    const position = step % 16;
+    const chordPosition = step % 8;
+    const progression = Math.floor(step / 8) % roots.length;
+    const root = roots[progression];
+
+    if (chordPosition === 0) {
+      for (const interval of [0, 3, 7, 12]) {
+        this.musicNote(root + interval, unit * 7.6, start, 'sawtooth', 0.043, 0.3, 680);
+      }
+      this.musicNote(root - 12, unit * 4.5, start, 'sine', 0.095, 0.08, 260);
+      this.musicNoise(start, 0.32, 0.04, 240);
+    }
+    if (position === 3 || position === 7 || position === 11 || position === 15) {
+      const lead = leadNotes[Math.floor(position / 4)];
+      this.musicNote(lead, unit * 2.2, start, 'sine', 0.065, 0.12, 1100);
+    }
+    if (position === 6 || position === 14) {
+      this.musicNote(root + 19, unit * 1.5, start, 'triangle', 0.04, 0.06, 1500);
+    }
+  }
+
+  private scheduleHorrorMusic(step: number, start: number, unit: number) {
+    const roots = [37, 38, 32, 31];
+    const highPattern: Array<number | null> = [
+      null, null, null, 73, null, null, null, null,
+      null, 74, null, null, null, null, 80, null,
+      null, null, 77, null, null, null, null, 76,
+      null, null, null, null, 85, null, 79, null,
+    ];
+    const position = step % 32;
+    const chordPosition = step % 8;
+    const root = roots[Math.floor(step / 8) % roots.length];
+    const highNote = highPattern[position];
+
+    if (chordPosition === 0) {
+      for (const interval of [0, 1, 6]) {
+        this.musicNote(root + interval, unit * 7.8, start, 'sawtooth', 0.037, 0.55, 390);
+      }
+      this.musicNote(root - 12, unit * 5, start, 'sine', 0.1, 0.12, 180);
+    }
+    if (highNote !== null) {
+      this.musicNote(highNote, unit * 2.4, start, 'sine', 0.055, 0.2, 1350, highNote - 1);
+    }
+    if (chordPosition === 0 || chordPosition === 3) {
+      this.musicNote(32, unit * 0.85, start, 'sine', 0.085, 0.025, 150, 29);
+    }
+    if (position === 7 || position === 15 || position === 30) {
+      this.musicNoise(start, 0.5, 0.038, 330);
+    }
+  }
+
+  private musicNote(
+    midi: number,
+    duration: number,
+    start: number,
+    type: OscillatorType,
+    volume: number,
+    attack: number,
+    cutoff: number,
+    endMidi = midi
+  ) {
+    const context = this.context;
+    const bus = this.musicBus;
+    if (!context || !bus || this.muted || context.state === 'closed') return;
+
+    const oscillator = context.createOscillator();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    const end = start + duration;
+    const safeAttack = Math.min(attack, duration * 0.4);
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(this.midiToFrequency(midi), start);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      this.midiToFrequency(endMidi),
+      end
+    );
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoff;
+    filter.Q.value = 0.65;
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(volume, start + safeAttack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    oscillator.connect(filter);
+    filter.connect(gain);
+    gain.connect(bus);
+    oscillator.start(start);
+    oscillator.stop(end + 0.03);
+  }
+
+  private musicNoise(start: number, duration: number, volume: number, cutoff: number) {
+    const context = this.context;
+    const bus = this.musicBus;
+    const buffer = this.musicNoiseBuffer;
+    if (!context || !bus || !buffer || this.muted || context.state === 'closed') return;
+
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    const end = start + duration;
+
+    source.buffer = buffer;
+    filter.type = cutoff < 500 ? 'lowpass' : 'bandpass';
+    filter.frequency.value = cutoff;
+    filter.Q.value = 0.9;
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(bus);
+    source.start(start, 0, Math.min(duration, buffer.duration));
+  }
+
+  private midiToFrequency(midi: number): number {
+    return 440 * 2 ** ((midi - 69) / 12);
+  }
+
+  private getBpm(zone: number): number {
+    return [112, 100, 76, 58][zone] ?? 76;
+  }
+
+  private getMusicVolume(zone: number): number {
+    return [0.5, 0.54, 0.58, 0.5][zone] ?? 0.52;
   }
 
   private tone(
