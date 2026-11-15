@@ -18,6 +18,7 @@ export class GameAudio {
   private nextMusicStep = 0;
   private musicStep = 0;
   private zoneIndex = 0;
+  private dragonBattle = false;
   private muted = false;
   private readonly lastPlayed = new Map<string, number>();
 
@@ -64,6 +65,20 @@ export class GameAudio {
     }
   }
 
+  setDragonBattle(active: boolean) {
+    if (this.dragonBattle === active) return;
+    this.dragonBattle = active;
+    const context = this.context;
+    if (!context || !this.musicBus) return;
+    const now = context.currentTime;
+    this.musicBus.gain.cancelScheduledValues(now);
+    this.musicBus.gain.setValueAtTime(Math.max(0.0001, this.musicBus.gain.value), now);
+    this.musicBus.gain.linearRampToValueAtTime(0.0001, now + 0.16);
+    this.musicBus.gain.linearRampToValueAtTime(this.getMusicVolume(this.zoneIndex), now + 0.75);
+    this.musicStep = 0;
+    this.nextMusicStep = now + 0.18;
+  }
+
   toggleMute(): boolean {
     this.unlock();
     this.muted = !this.muted;
@@ -92,6 +107,15 @@ export class GameAudio {
     if (!this.canPlay('stun', 0.15)) return;
     this.tone(520, 0.16, 'sine', 0.12, 720);
     this.tone(780, 0.24, 'sine', 0.09, 620, 0.08);
+  }
+
+  playBossVictory() {
+    if (!this.canPlay('boss-victory', 1.5)) return;
+    const notes = [48, 55, 60, 64, 67, 72, 76, 79];
+    notes.forEach((midi, index) => {
+      this.tone(this.midiToFrequency(midi), 0.42, index < 4 ? 'sawtooth' : 'triangle', 0.085, this.midiToFrequency(midi + 12), index * 0.11);
+    });
+    this.noiseBurst(0.45, 0.08, 900);
   }
 
   playCollect() {
@@ -306,8 +330,41 @@ export class GameAudio {
       this.scheduleMidMusic(step, start, stepDuration);
     } else if (zone === 2) {
       this.scheduleDeepMusic(step, start, stepDuration);
+    } else if (this.dragonBattle) {
+      this.scheduleDragonBossMusic(step, start, stepDuration);
     } else {
       this.scheduleHorrorMusic(step, start, stepDuration);
+    }
+  }
+
+  private scheduleDragonBossMusic(step: number, start: number, unit: number) {
+    const melody: Array<number | null> = [
+      69, 69, 72, 74, 76, 74, 72, 69,
+      67, 67, 69, 72, 74, 76, 79, 76,
+      69, 72, 76, 81, 79, 76, 74, 72,
+      67, 69, 72, 74, 76, 74, 72, 69,
+    ];
+    const roots = [33, 36, 31, 38];
+    const position = step % 32;
+    const beat = step % 8;
+    const root = roots[Math.floor(step / 8) % roots.length];
+    const lead = melody[position];
+
+    if (lead !== null) {
+      this.musicNote(lead, unit * 0.85, start, 'square', 0.075, 0.008, 2200, lead + (position % 8 === 7 ? 12 : 0));
+      this.musicNote(lead - 12, unit * 0.72, start, 'triangle', 0.035, 0.012, 1300);
+    }
+    if (beat === 0) {
+      for (const interval of [0, 3, 7, 12]) {
+        this.musicNote(root + interval, unit * 7.5, start, 'sawtooth', 0.045, 0.08, 900);
+      }
+    }
+    if (beat === 0 || beat === 2 || beat === 4 || beat === 6) {
+      this.musicNote(root - 12, unit * 1.35, start, 'sine', beat === 0 || beat === 4 ? 0.13 : 0.09, 0.01, 240);
+      this.musicNoise(start, unit * 0.42, beat === 0 || beat === 4 ? 0.075 : 0.045, 520);
+    }
+    if (beat === 3 || beat === 7) {
+      this.musicNoise(start, unit * 0.23, 0.035, 4200);
     }
   }
 
@@ -490,10 +547,12 @@ export class GameAudio {
   }
 
   private getBpm(zone: number): number {
+    if (zone === 3 && this.dragonBattle) return 138;
     return [112, 100, 76, 58][zone] ?? 76;
   }
 
   private getMusicVolume(zone: number): number {
+    if (zone === 3 && this.dragonBattle) return 0.7;
     return [0.5, 0.54, 0.58, 0.5][zone] ?? 0.52;
   }
 

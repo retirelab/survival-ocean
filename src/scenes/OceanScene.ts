@@ -159,6 +159,7 @@ export class OceanScene extends Phaser.Scene {
   private keyM!: Phaser.Input.Keyboard.Key;
   private keyG!: Phaser.Input.Keyboard.Key;
   private keyE!: Phaser.Input.Keyboard.Key;
+  private keyZ!: Phaser.Input.Keyboard.Key;
   private keyEnter!: Phaser.Input.Keyboard.Key;
   private keyNumbers: Phaser.Input.Keyboard.Key[] = [];
 
@@ -183,6 +184,10 @@ export class OceanScene extends Phaser.Scene {
   private mineralText!: Phaser.GameObjects.Text;
   private noticeText!: Phaser.GameObjects.Text;
   private noticeTimer = 0;
+  private aiming = false;
+  private aimLockedUntilRelease = false;
+  private aimGraphics!: Phaser.GameObjects.Graphics;
+  private aimText!: Phaser.GameObjects.Text;
 
   // 가상 조이스틱 & 터치 액션 버튼 (모바일/태블릿 멀티터치 대응)
   private joyBase!: Phaser.GameObjects.Arc;
@@ -310,6 +315,7 @@ export class OceanScene extends Phaser.Scene {
       this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
       this.keyG = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G);
       this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
       this.keyEnter = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
       this.keyNumbers = [
         this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
@@ -369,6 +375,19 @@ export class OceanScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(40)
+      .setVisible(false);
+
+    this.aimGraphics = this.add.graphics().setDepth(34).setVisible(false);
+    this.aimText = this.add
+      .text(0, 0, '🎯 조준 중 · 방향키/WASD · 발사하면 해제', {
+        fontSize: '13px',
+        color: '#fef08a',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(2, 6, 23, 0.84)',
+        padding: { x: 9, y: 5 },
+      })
+      .setOrigin(0.5)
+      .setDepth(35)
       .setVisible(false);
 
     this.dragonDangerGraphics = this.add.graphics().setDepth(7);
@@ -617,6 +636,38 @@ export class OceanScene extends Phaser.Scene {
     const strength = clamped / this.joyRadius;
     this.joyVec.x = nx * strength;
     this.joyVec.y = ny * strength;
+  }
+
+  private setAiming(active: boolean) {
+    if (this.aiming === active) return;
+    this.aiming = active;
+    const timeScale = active ? 0.25 : 1;
+    this.tweens.timeScale = timeScale;
+    this.time.timeScale = timeScale;
+    this.aimGraphics.setVisible(active);
+    this.aimText.setVisible(active);
+    if (!active) this.aimGraphics.clear();
+  }
+
+  private releaseAimAfterShot() {
+    if (!this.aiming) return;
+    this.aimLockedUntilRelease = true;
+    this.setAiming(false);
+  }
+
+  private drawAimGuide() {
+    if (!this.aiming) return;
+    const length = Math.hypot(this.scale.width, this.scale.height);
+    const endX = this.player.x + this.aimDirection.x * length;
+    const endY = this.player.y + this.aimDirection.y * length;
+    this.aimGraphics.clear();
+    this.aimGraphics.lineStyle(8, 0x0f172a, 0.5);
+    this.aimGraphics.lineBetween(this.player.x, this.player.y, endX, endY);
+    this.aimGraphics.lineStyle(3, 0xfde047, 0.95);
+    this.aimGraphics.lineBetween(this.player.x, this.player.y, endX, endY);
+    this.aimGraphics.fillStyle(0xfef08a, 1);
+    this.aimGraphics.fillCircle(this.player.x + this.aimDirection.x * 52, this.player.y + this.aimDirection.y * 52, 6);
+    this.aimText.setPosition(this.scale.width / 2, Math.max(174, this.scale.height * 0.18));
   }
 
   private destroyMenu() {
@@ -988,15 +1039,70 @@ export class OceanScene extends Phaser.Scene {
     if (this.dragonState !== 'sleeping') return;
     this.dragonState = 'awake';
     this.dragonAttackCooldown = 2.5;
+    this.audio.setDragonBattle(true);
     this.applyDragonAppearance();
     this.showNotice('수룡이 깨어났습니다! 공격 전 붉은 위험 표시에서 벗어나세요!');
   }
 
-  private damageDragon(amount: number) {
+  private getDragonHitboxes() {
+    if (!this.dragonSprite?.visible) return undefined;
+    const sprite = this.dragonSprite;
+    const direction = sprite.flipX ? -1 : 1;
+    const body = new Phaser.Geom.Rectangle(
+      sprite.x - sprite.displayWidth * 0.25,
+      sprite.y - sprite.displayHeight * 0.23,
+      sprite.displayWidth * 0.5,
+      sprite.displayHeight * 0.52
+    );
+    const head = new Phaser.Geom.Circle(
+      sprite.x + direction * sprite.displayWidth * 0.27,
+      sprite.y - sprite.displayHeight * 0.12,
+      Math.min(sprite.displayWidth * 0.095, sprite.displayHeight * 0.16)
+    );
+    return { body, head };
+  }
+
+  private preventPlayerInsideDragon(previousX: number, previousY: number) {
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState === 'respawning') return;
+    const hitboxes = this.getDragonHitboxes();
+    if (!hitboxes) return;
+    const playerRadius = 21;
+    const expandedBody = Phaser.Geom.Rectangle.Clone(hitboxes.body);
+    Phaser.Geom.Rectangle.Inflate(expandedBody, playerRadius, playerRadius);
+    const expandedHead = new Phaser.Geom.Circle(hitboxes.head.x, hitboxes.head.y, hitboxes.head.radius + playerRadius);
+    if (
+      Phaser.Geom.Rectangle.Contains(expandedBody, this.player.x, this.player.y) ||
+      Phaser.Geom.Circle.Contains(expandedHead, this.player.x, this.player.y)
+    ) {
+      this.player.setPosition(previousX, previousY);
+    }
+  }
+
+  private damageDragon(amount: number, critical = false, hitX?: number, hitY?: number) {
     if (this.dragonState === 'sleeping') this.wakeDragon();
     if (this.dragonState !== 'awake') return;
     this.dragonHp = Math.max(0, this.dragonHp - amount);
     this.audio.playHit();
+    if (critical && hitX !== undefined && hitY !== undefined) {
+      const text = this.add
+        .text(hitX, hitY - 10, `크리티컬!  -${Math.round(amount)}`, {
+          fontSize: '12px',
+          color: '#fde047',
+          fontStyle: 'bold',
+          stroke: '#7c2d12',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setDepth(42);
+      this.tweens.add({
+        targets: text,
+        y: hitY - 42,
+        alpha: 0,
+        duration: 720,
+        ease: 'Cubic.Out',
+        onComplete: () => text.destroy(),
+      });
+    }
     if (this.dragonHp <= 0) this.defeatDragon();
     this.refreshDragonUi();
   }
@@ -1009,7 +1115,8 @@ export class OceanScene extends Phaser.Scene {
       this.dragonSprite.setAngle(0);
     }
     this.clearDragonDanger();
-    this.audio.playStun();
+    this.audio.setDragonBattle(false);
+    this.audio.playBossVictory();
     this.applyDragonAppearance();
     this.showNotice('수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)');
   }
@@ -1236,6 +1343,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private beginDragonRespawn() {
+    this.audio.setDragonBattle(false);
     this.dragonSprite?.destroy();
     this.dragonStatusText?.destroy();
     this.dragonSprite = undefined;
@@ -1320,6 +1428,7 @@ export class OceanScene extends Phaser.Scene {
     this.dragonStatusText?.setVisible(visible);
     this.dragonRespawnText?.setVisible(visible && this.dragonState === 'respawning');
     if (!visible) {
+      this.audio.setDragonBattle(false);
       this.clearDragonDanger();
       this.dragonBossBar.clear();
       this.dragonBossText.setVisible(false);
@@ -1642,6 +1751,7 @@ export class OceanScene extends Phaser.Scene {
       vy: this.aimDirection.y * 520 * this.bulletSpeedMultiplier,
       life: 1.5,
     });
+    this.releaseAimAfterShot();
   }
 
   private tryCollectNearbyFish() {
@@ -1728,6 +1838,7 @@ export class OceanScene extends Phaser.Scene {
     this.updateMiningInteraction();
     if (this.zoneIndex === DRAGON_ZONE_INDEX) {
       this.ensureDragonVisual();
+      this.audio.setDragonBattle(this.dragonState === 'awake');
     } else {
       this.spawnFishWave(6);
     }
@@ -1753,7 +1864,7 @@ export class OceanScene extends Phaser.Scene {
     const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
     const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
     this.statsText.setText(
-      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}`
+      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}  🎯 Z 조준`
     );
     const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
     const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
@@ -1766,13 +1877,18 @@ export class OceanScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    const dt = delta / 1000;
+    const rawDt = delta / 1000;
     const { width, height } = this.scale;
 
     if (this.menuMode) {
       this.updateMenuKeyboard();
       return;
     }
+
+    const zDown = Boolean(this.keyZ?.isDown);
+    if (!zDown) this.aimLockedUntilRelease = false;
+    this.setAiming(zDown && !this.aimLockedUntilRelease);
+    const dt = rawDt * (this.aiming ? 0.25 : 1);
 
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.autoFireEnabled && this.shootHolding && this.shootCooldown <= 0) {
@@ -1837,8 +1953,14 @@ export class OceanScene extends Phaser.Scene {
       this.aimDirection.y = vy / aimLength;
     }
 
-    this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
-    this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
+    const previousPlayerX = this.player.x;
+    const previousPlayerY = this.player.y;
+    if (!this.aiming) {
+      this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
+      this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
+    }
+    this.preventPlayerInsideDragon(previousPlayerX, previousPlayerY);
+    this.drawAimGuide();
     this.updateMiningInteraction();
 
     if (vx < -0.08) {
@@ -1906,11 +2028,22 @@ export class OceanScene extends Phaser.Scene {
       b.life -= dt;
 
       let hit = false;
+      const dragonHitboxes = this.getDragonHitboxes();
       if (
         this.zoneIndex === DRAGON_ZONE_INDEX &&
         this.dragonSprite?.visible &&
         (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
-        this.dragonSprite.getBounds().contains(b.gfx.x, b.gfx.y)
+        dragonHitboxes &&
+        Phaser.Geom.Circle.Contains(dragonHitboxes.head, b.gfx.x, b.gfx.y)
+      ) {
+        this.damageDragon(this.bulletDamage * this.attackMultiplier * 2, true, b.gfx.x, b.gfx.y);
+        hit = true;
+      } else if (
+        this.zoneIndex === DRAGON_ZONE_INDEX &&
+        this.dragonSprite?.visible &&
+        (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
+        dragonHitboxes &&
+        Phaser.Geom.Rectangle.Contains(dragonHitboxes.body, b.gfx.x, b.gfx.y)
       ) {
         this.damageDragon(this.bulletDamage * this.attackMultiplier);
         hit = true;
