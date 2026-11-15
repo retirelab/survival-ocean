@@ -263,7 +263,12 @@ export class OceanScene extends Phaser.Scene {
     }
     const count = this.bag.length;
     this.bag = [];
-    this.showNotice(`수조에 물고기 ${count}마리를 옮겨 가방을 비웠어요!`);
+    if (count >= this.maxBag) {
+      this.level += 1;
+      this.showNotice(`가득 찬 가방(${count}마리)을 수조에 비워 레벨 업! ⭐ Lv.${this.level}`);
+    } else {
+      this.showNotice(`수조에 ${count}마리를 비웠어요! (15마리 가득 채워 비우면 Lv UP)`);
+    }
     this.updateHud();
   }
 
@@ -421,8 +426,11 @@ export class OceanScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, fish.sprite.x, fish.sprite.y);
       if (dist <= 72) {
         this.bag.push(fish.spec.name);
-        this.gainExp(fish.spec.exp);
-        this.showNotice(`${fish.spec.name} 수집! (+${fish.spec.exp} EXP)`);
+        if (this.bag.length >= this.maxBag) {
+          this.showNotice(`${fish.spec.name} 수집! 가방이 가득 찼으니 수조(T)에 비워 레벨업하세요!`);
+        } else {
+          this.showNotice(`${fish.spec.name} 수집! (가방 ${this.bag.length}/${this.maxBag})`);
+        }
         fish.sprite.destroy();
         fish.label.destroy();
         this.fishList.splice(i, 1);
