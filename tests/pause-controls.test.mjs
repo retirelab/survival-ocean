@@ -35,7 +35,7 @@ test('pause and resume work independently of a paused Phaser input manager', () 
   const s = setup();
   s.key('KeyP'); assert.equal(s.calls.pause, 0); // start screen
   s.controls.setActive(true);
-  s.button('⏸ 일시정지').click();
+  s.button('⏸\n정지').click();
   s.key('KeyP', true); assert.equal(s.calls.pause, 1); assert.equal(s.calls.resume, 0);
   s.events.get('blur')(); assert.equal(s.calls.pause, 1);
   s.key('Escape'); assert.equal(s.calls.resume, 1);
@@ -62,4 +62,18 @@ test('backgrounding pauses once and requires an explicit resume; cleanup removes
   s.controls.destroy();
   assert.equal(s.events.size, 0); assert.equal(s.documentEvents.size, 0);
   assert.equal(document.body.children[0].removed, true);
+});
+
+
+test('shop overlay keeps the world paused until the shop closes', () => {
+  const s = setup(); s.controls.setActive(true);
+  assert.equal(s.controls.openOverlay(), true);
+  assert.equal(s.calls.pause, 1);
+  s.key('KeyP'); s.key('Escape'); s.controls.resume();
+  assert.equal(s.calls.resume, 0);
+  assert.equal(s.controls.openOverlay(), false);
+  s.controls.closeOverlay();
+  assert.equal(s.calls.resume, 1);
+  assert.equal(s.button('⏸\n정지').hidden, false);
+  s.controls.pause(); assert.equal(s.controls.openOverlay(), false);
 });

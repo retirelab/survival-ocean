@@ -67,3 +67,14 @@ test('storage disabled or full returns failure without deleting the prior save',
   assert.equal(readSave().data, null);
   assert.ok(readSave().error);
 });
+
+
+test('legacy saves stay readable and new saves preserve purchased submarines', () => {
+  assert.equal(writeSave(sample()), true);
+  assert.equal(readSave().data.submarines, undefined);
+  const data = { ...sample(), submarines: { coins: 427, owned: ['basic', 'coral'], equipped: 'coral' } };
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data.submarines, data.submarines);
+  data.submarines.equipped = 'gold';
+  assert.equal(writeSave(data), false);
+});

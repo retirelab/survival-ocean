@@ -5,9 +5,10 @@ export class PauseControls {
   private status = document.createElement('p');
   private pauseButton = document.createElement('button');
   private paused = false;
+  private overlayOpen = false;
   private active = false;
   private onKey = (event: KeyboardEvent) => {
-    if (event.repeat || !this.active || !['Escape', 'KeyP'].includes(event.code)) return;
+    if (event.repeat || !this.active || this.overlayOpen || !['Escape', 'KeyP'].includes(event.code)) return;
     event.preventDefault();
     if (this.paused) this.resume(); else this.pause();
   };
@@ -16,8 +17,10 @@ export class PauseControls {
 
   constructor(private handlers: { pause: () => void; resume: () => void; save: () => boolean }) {
     this.root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:10;font-family:system-ui,sans-serif;color:white';
-    this.pauseButton = this.button('⏸ 일시정지', () => this.pause());
-    this.pauseButton.style.cssText += ';position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));pointer-events:auto';
+    this.pauseButton = this.button('⏸\n정지', () => this.pause());
+    this.pauseButton.style.cssText += ';position:absolute;right:calc(max(12px,env(safe-area-inset-right)) + 124px);top:calc(max(12px,env(safe-area-inset-top)) + 68px);width:52px;height:44px;padding:2px;font-size:12px;white-space:pre-line;pointer-events:auto';
+    this.pauseButton.setAttribute('aria-label', '일시정지');
+    this.pauseButton.title = '일시정지 (P / Esc)';
     this.panel.style.cssText = 'position:absolute;inset:0;background:rgba(2,6,23,.92);display:none;align-items:center;justify-content:center;pointer-events:auto;padding:16px;box-sizing:border-box';
     this.panel.setAttribute('role', 'dialog');
     this.panel.setAttribute('aria-modal', 'true');
@@ -54,7 +57,23 @@ export class PauseControls {
     return button;
   }
 
-  setActive(active: boolean) { this.active = active; this.pauseButton.hidden = !active; }
+  setActive(active: boolean) { this.active = active; this.pauseButton.hidden = !active || this.overlayOpen; }
+
+  openOverlay(): boolean {
+    if (!this.active || this.paused) return false;
+    this.overlayOpen = true;
+    this.paused = true;
+    this.pauseButton.hidden = true;
+    this.handlers.pause();
+    return true;
+  }
+
+  closeOverlay() {
+    if (!this.overlayOpen) return;
+    this.overlayOpen = false;
+    this.pauseButton.hidden = !this.active;
+    this.resume();
+  }
 
   pause() {
     if (!this.active || this.paused) return;
@@ -66,7 +85,7 @@ export class PauseControls {
   }
 
   resume() {
-    if (!this.paused) return;
+    if (!this.paused || this.overlayOpen) return;
     this.paused = false;
     this.panel.style.display = 'none';
     this.handlers.resume();

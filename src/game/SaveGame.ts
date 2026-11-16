@@ -1,7 +1,10 @@
+import { isFleetState, type FleetState } from './Submarines.js';
+
 export const SAVE_KEY = 'survival-ocean.save.v1';
 
 export interface SaveGame {
   version: 1;
+  submarines?: FleetState;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -30,7 +33,8 @@ const strings = (value: unknown, max: number) => Array.isArray(value) && value.l
 
 export function isSaveGame(value: unknown): value is SaveGame {
   if (!object(value) || value.version !== 1 || !number(value.savedAt, 0, 1e15) ||
-      !integer(value.zoneIndex, 0, 3) || !integer(value.level, 1, 20)) return false;
+      !integer(value.zoneIndex, 0, 3) || !integer(value.level, 1, 20) ||
+      (value.submarines !== undefined && !isFleetState(value.submarines))) return false;
   const { player: p, stats: s, dragon: d, menu: m, upgrades: u, minerals: minerals } = value;
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
   return number(p.x, 0, 1) && number(p.y, 0, 1) && (p.facing === 1 || p.facing === -1) && number(p.hp, 1, 250) &&
