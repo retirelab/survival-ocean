@@ -48,8 +48,8 @@ export function isSaveGame(value: unknown): value is SaveGame {
     typeof s.autoFire === 'boolean' && number(s.regenAmount, 0, 10) && number(s.regenInterval, 0, 20) && number(s.regenTimer, -1, 20) &&
     ['sleeping', 'awake', 'dead', 'respawning'].includes(d.state as string) && number(d.hp, 0, 1250) &&
     integer(d.harvests, 0, 3) && number(d.respawn, 0, 300) && number(d.cooldown, -1, 30) &&
-    Array.isArray(value.ores) && value.ores.length <= 2 && new Set(value.ores.map(ore => object(ore) ? ore.id : null)).size === value.ores.length &&
-    value.ores.every(ore => object(ore) && ['upper', 'lower'].includes(ore.id as string) && integer(ore.remaining, 0, 5) && number(ore.respawn, 0, 60)) &&
+    Array.isArray(value.ores) && value.ores.length <= 4 && new Set(value.ores.map(ore => object(ore) ? ore.id : null)).size === value.ores.length &&
+    value.ores.every(ore => object(ore) && ['upper', 'lower', 'upper_left', 'lower_right'].includes(ore.id as string) && integer(ore.remaining, 0, 5) && number(ore.respawn, 0, 60)) &&
     integer(m.stage, 0, 3) && typeof m.upgrading === 'boolean' &&
     (m.nextZone === null || integer(m.nextZone, 0, 3)) && number(m.spawnY, 0, 1);
 }

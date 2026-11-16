@@ -90,3 +90,15 @@ test('electric cooldown and armor duration survive save/load and reject out of r
   data.combat.shockCooldown = 31; assert.equal(writeSave(data), false);
   data.combat.shockCooldown = 0; data.combat.armorRemaining = -1; assert.equal(writeSave(data), false);
 });
+
+
+test('four mining rocks round-trip while older two-rock saves remain valid', () => {
+  const data = sample();
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data.ores, data.ores);
+  data.ores.push({ id: 'upper_left', remaining: 5, respawn: 0 }, { id: 'lower_right', remaining: 0, respawn: 24 });
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data.ores, data.ores);
+  data.ores.push({ id: 'unknown', remaining: 5, respawn: 0 });
+  assert.equal(writeSave(data), false);
+});

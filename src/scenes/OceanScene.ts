@@ -65,7 +65,7 @@ type MenuMode = 'start' | 'upgrade' | null;
 type MineralType = '다이아몬드' | '루비' | '사파이어' | '토파즈' | '부싯돌';
 
 interface OreNode {
-  id: 'upper' | 'lower';
+  id: 'upper' | 'lower' | 'upper_left' | 'lower_right';
   x: number;
   y: number;
   remaining: number;
@@ -1772,23 +1772,24 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private ensureOreNodes() {
-    if (this.oreNodes.length > 0) return;
-    this.oreNodes = [
-      { id: 'upper', x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 },
-      { id: 'lower', x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 },
-    ];
+    // 예전 저장의 채굴 횟수와 재생 시간은 유지하고 없는 바위만 추가합니다.
+    const ids: OreNode['id'][] = ['upper', 'lower', 'upper_left', 'lower_right'];
+    for (const id of ids) {
+      if (!this.oreNodes.some(ore => ore.id === id)) {
+        this.oreNodes.push({ id, x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 });
+      }
+    }
   }
 
   private layoutOreNodes(width: number, height: number) {
-    const upper = this.oreNodes.find((ore) => ore.id === 'upper');
-    const lower = this.oreNodes.find((ore) => ore.id === 'lower');
-    if (upper) {
-      upper.x = width * 0.76;
-      upper.y = height * 0.36;
-    }
-    if (lower) {
-      lower.x = width * 0.22;
-      lower.y = height * 0.62;
+    const positions: Record<OreNode['id'], [number, number]> = {
+      upper: [0.76, 0.36], lower: [0.22, 0.62],
+      upper_left: [0.22, 0.36], lower_right: [0.76, 0.62],
+    };
+    for (const ore of this.oreNodes) {
+      const [x, y] = positions[ore.id];
+      ore.x = width * x;
+      ore.y = height * y;
     }
   }
 
@@ -2248,7 +2249,7 @@ export class OceanScene extends Phaser.Scene {
       .join('  ');
     const oreRespawns = this.oreNodes
       .filter((ore) => ore.remaining <= 0 && ore.respawnRemaining > 0)
-      .map((ore) => `${ore.id === 'upper' ? '위' : '아래'}쪽 ${Math.ceil(ore.respawnRemaining)}초`)
+      .map((ore) => `${({ upper: '오른쪽 위', lower: '왼쪽 아래', upper_left: '왼쪽 위', lower_right: '오른쪽 아래' })[ore.id]} ${Math.ceil(ore.respawnRemaining)}초`)
       .join(' · ');
     const oreTimerText = this.zoneIndex === 1 && oreRespawns ? `\n🪨 광석 재생까지: ${oreRespawns}` : '';
     this.mineralText
