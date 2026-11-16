@@ -3,16 +3,16 @@ export type Material = typeof MATERIALS[number];
 export type Resources = Record<Material, number>;
 export interface Submarine {
   id: string; name: string; grade: number; color: string; trim: string;
-  recipe: Partial<Resources>; description: string; speed: number;
+  recipe: Partial<Resources>; description: string; ability: string; speed: number;
 }
 export const SUBMARINES: readonly Submarine[] = [
-  { id: 'basic', name: '일반 잠수함', grade: 5, color: '#fde047', trim: '#f59e0b', recipe: {}, description: '노란 선체와 파란 창의 기본 탐험 잠수함', speed: 1 },
-  { id: 'sturdy', name: '튼튼한 검정 잠수함', grade: 4, color: '#94a3b8', trim: '#334155', recipe: { 부싯돌: 10 }, description: '검은 부싯돌 장갑과 두꺼운 철판', speed: 1 },
-  { id: 'fire', name: '불속성 잠수함', grade: 3, color: '#fb7185', trim: '#be123c', recipe: { 루비: 5, 부싯돌: 10 }, description: '붉은 루비 코어와 타오르는 불꽃 장식', speed: 1 },
-  { id: 'ice', name: '얼음속성 잠수함', grade: 3, color: '#60a5fa', trim: '#1d4ed8', recipe: { 사파이어: 5, 부싯돌: 10 }, description: '푸른 사파이어 선체와 뾰족한 얼음 결정', speed: 1 },
-  { id: 'electric', name: '전기속성 잠수함', grade: 3, color: '#fbbf24', trim: '#b45309', recipe: { 토파즈: 6, 부싯돌: 10 }, description: '주황빛 토파즈 코어와 번개·코일 장식', speed: 1 },
-  { id: 'metal', name: '메탈 잠수함', grade: 2, color: '#a5f3fc', trim: '#0891b2', recipe: { 다이아몬드: 7 }, description: '은빛 금속 장갑과 청록색 다이아몬드', speed: 1 },
-  { id: 'baby_dragon', name: '아기 드래곤 잠수함', grade: 1, color: '#22d3ee', trim: '#0369a1', recipe: { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }, description: '수룡의 뿔·비늘·꼬리를 품은 아기 드래곤', speed: 1 },
+  { id: 'basic', name: '일반 잠수함', grade: 5, color: '#fde047', trim: '#f59e0b', recipe: {}, description: '노란 선체와 파란 창의 기본 탐험 잠수함', ability: '특수 능력 없음', speed: 1 },
+  { id: 'sturdy', name: '튼튼한 검정 잠수함', grade: 4, color: '#94a3b8', trim: '#334155', recipe: { 부싯돌: 10 }, description: '검은 부싯돌 장갑과 두꺼운 철판', ability: '물고기 피격 즉시 5초간 방어 2배', speed: 1 },
+  { id: 'fire', name: '불속성 잠수함', grade: 3, color: '#fb7185', trim: '#be123c', recipe: { 루비: 5, 부싯돌: 10 }, description: '붉은 루비 코어와 타오르는 불꽃 장식', ability: '불덩이 명중 시 5초간 매초 화상 2피해', speed: 1 },
+  { id: 'ice', name: '얼음속성 잠수함', grade: 3, color: '#60a5fa', trim: '#1d4ed8', recipe: { 사파이어: 5, 부싯돌: 10 }, description: '푸른 사파이어 선체와 뾰족한 얼음 결정', ability: '고드름 명중 시 3초간 이동 속도 50% 감소', speed: 1 },
+  { id: 'electric', name: '전기속성 잠수함', grade: 3, color: '#fbbf24', trim: '#b45309', recipe: { 토파즈: 6, 부싯돌: 10 }, description: '주황빛 토파즈 코어와 번개·코일 장식', ability: 'B / 전기일격: 주변 물고기 5초 마비 · 재사용 30초', speed: 1 },
+  { id: 'metal', name: '메탈 잠수함', grade: 2, color: '#a5f3fc', trim: '#0891b2', recipe: { 다이아몬드: 7 }, description: '은빛 금속 장갑과 청록색 다이아몬드', ability: '기본 방어 4배 · 끊어서 쏘는 노란 관통 레이저', speed: 1 },
+  { id: 'baby_dragon', name: '아기 드래곤 잠수함', grade: 1, color: '#22d3ee', trim: '#0369a1', recipe: { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }, description: '수룡의 뿔·비늘·꼬리를 품은 아기 드래곤', ability: '스페이스바 / 발사를 누르는 동안 긴 푸른 브레스', speed: 1 },
 ];
 export interface FleetState { owned: string[]; equipped: string }
 export const newFleet = (): FleetState => ({ owned: ['basic'], equipped: 'basic' });

@@ -101,6 +101,7 @@ export class SubmarinePanel {
       const grade = document.createElement('div'); grade.textContent = `${sub.grade}등급`; grade.style.color = sub.color;
       const name = document.createElement('h3'); name.textContent = sub.name;
       const stats = document.createElement('p'); stats.textContent = sub.description;
+      const ability = document.createElement('p'); ability.textContent = sub.ability; ability.style.color = '#7dd3fc';
       const recipe = document.createElement('div');
       const required = Object.entries(sub.recipe);
       if (!required.length) { const free = document.createElement('p'); free.textContent = '처음부터 보유'; recipe.append(free); }
@@ -120,7 +121,7 @@ export class SubmarinePanel {
         this.message.textContent = error ?? `✅ ${sub.name} 탑승 완료! 저장됐어요.`;
         this.renderItems(); this.closeButton.focus({ preventScroll: true });
       };
-      item.append(image, grade, name, stats, recipe, button); this.list.append(item);
+      item.append(image, grade, name, stats, ability, recipe, button); this.list.append(item);
     }
   }
   private close() {

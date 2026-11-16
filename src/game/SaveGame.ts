@@ -5,6 +5,7 @@ export const SAVE_KEY = 'survival-ocean.save.v1';
 export interface SaveGame {
   version: 1;
   submarines?: FleetState;
+  combat?: { armorRemaining: number; shockCooldown: number };
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -35,6 +36,7 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (!object(value) || value.version !== 1 || !number(value.savedAt, 0, 1e15) ||
       !integer(value.zoneIndex, 0, 3) || !integer(value.level, 1, 20) ||
       (value.submarines !== undefined && !normalizeFleet(value.submarines))) return false;
+  if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30))) return false;
   const { player: p, stats: s, dragon: d, menu: m, upgrades: u, minerals: minerals } = value;
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
   return number(p.x, 0, 1) && number(p.y, 0, 1) && (p.facing === 1 || p.facing === -1) && number(p.hp, 1, 250) &&

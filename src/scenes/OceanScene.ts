@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
+import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, inventoryResources, submarineImage } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
@@ -43,10 +44,13 @@ interface FishEntity {
   aggro: boolean;
   baseY: number;
   phase: number;
+  status: FishStatus;
 }
 
 interface BulletEntity {
-  gfx: Phaser.GameObjects.Arc;
+  gfx: Phaser.GameObjects.Shape;
+  weapon: WeaponKind;
+  damage: number;
   vx: number;
   vy: number;
   life: number;
@@ -170,6 +174,7 @@ export class OceanScene extends Phaser.Scene {
   private keyM!: Phaser.Input.Keyboard.Key;
   private keyG!: Phaser.Input.Keyboard.Key;
   private keyE!: Phaser.Input.Keyboard.Key;
+  private keyB!: Phaser.Input.Keyboard.Key;
   private keyZ!: Phaser.Input.Keyboard.Key;
   private keyEnter!: Phaser.Input.Keyboard.Key;
   private keyNumbers: Phaser.Input.Keyboard.Key[] = [];
@@ -271,6 +276,13 @@ export class OceanScene extends Phaser.Scene {
 
   private spawnTimer = 0;
   private shootCooldown = 0;
+  private armorRemaining = 0;
+  private shockCooldown = 0;
+  private shockBtnBg!: Phaser.GameObjects.Arc;
+  private shockBtnText!: Phaser.GameObjects.Text;
+  private breathGraphics!: Phaser.GameObjects.Graphics;
+  private armorGraphics!: Phaser.GameObjects.Graphics;
+  private breathDamageTimer = 0;
 
   constructor() {
     super('OceanScene');
@@ -331,6 +343,7 @@ export class OceanScene extends Phaser.Scene {
       this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
       this.keyG = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G);
       this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.keyB = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B);
       this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
       this.keyEnter = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
       this.keyNumbers = [
@@ -448,6 +461,8 @@ export class OceanScene extends Phaser.Scene {
       close: () => this.pauseControls?.closeOverlay(),
       select: id => this.selectSubmarine(id),
     });
+    this.breathGraphics = this.add.graphics().setDepth(8);
+    this.armorGraphics = this.add.graphics().setDepth(11);
     this.createControls();
     this.setupMultiTouchInput();
     this.layoutUI(width, height);
@@ -505,6 +520,9 @@ export class OceanScene extends Phaser.Scene {
     this.submarineSprite?.setTexture(`submarine-${sub.id}`).setDisplaySize(62, 37);
     this.speed = 250 * sub.speed;
     this.submarinePanel?.update(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot));
+    this.breathGraphics?.clear();
+    this.shootBtnText?.setText(this.fleet.equipped === 'baby_dragon' ? '🐉\n브레스' : '🔫\n발사');
+    this.updateShockButton();
   }
 
   private resetHeldInput() {
@@ -518,11 +536,13 @@ export class OceanScene extends Phaser.Scene {
     this.touchAimEnabled = false;
     this.aimLockedUntilRelease = false;
     this.setAiming(false);
+    this.breathGraphics?.clear();
   }
 
   private captureSave(): SaveGame {
     const { width, height } = this.scale;
     return {
+      combat: { armorRemaining: this.armorRemaining, shockCooldown: this.shockCooldown },
       submarines: { owned: [...this.fleet.owned], equipped: this.fleet.equipped },
       version: 1, savedAt: Date.now(), zoneIndex: this.zoneIndex, level: this.level,
       player: { x: this.player.x / width, y: this.player.y / height, facing: this.facing, hp: this.playerHp },
@@ -548,6 +568,8 @@ export class OceanScene extends Phaser.Scene {
     this.menuMode = null;
     this.fleet = save.submarines ? { ...save.submarines, owned: [...save.submarines.owned] } : newFleet();
     this.applySubmarine();
+    this.armorRemaining = save.combat?.armorRemaining ?? 0;
+    this.shockCooldown = save.combat?.shockCooldown ?? 0;
     this.level = save.level;
     this.playerHp = save.player.hp;
     this.bag = [...save.bag];
@@ -639,6 +661,12 @@ export class OceanScene extends Phaser.Scene {
       fontSize: '12px', color: '#fef08a', fontStyle: 'bold', align: 'center',
     }).setOrigin(0.5).setDepth(36);
 
+    this.shockBtnBg = this.add.circle(0, 0, 32, 0x334155, 0.95)
+      .setStrokeStyle(2, 0xfde047).setDepth(35).setVisible(false);
+    this.shockBtnText = this.add.text(0, 0, '⚡ B\n전기일격', {
+      fontSize: '11px', color: '#fef08a', fontStyle: 'bold', align: 'center',
+    }).setOrigin(0.5).setDepth(36).setVisible(false);
+
     // 수집 버튼 (F)
     this.collectBtnBg = this.add
       .circle(0, 0, 32, 0xfacc15, 0.9)
@@ -712,6 +740,11 @@ export class OceanScene extends Phaser.Scene {
         if (this.time.now < this.menuInputLockedUntil) return;
         const target = this.menuTargets.find((item) => item.bounds.contains(px, py));
         target?.action();
+        return;
+      }
+
+      if (this.shockBtnBg.visible && Phaser.Math.Distance.Between(px, py, this.shockBtnBg.x, this.shockBtnBg.y) <= 34) {
+        this.tryElectricShock();
         return;
       }
 
@@ -1168,6 +1201,10 @@ export class OceanScene extends Phaser.Scene {
     const aimY = shootY - 164;
     this.aimBtnBg.setPosition(aimX, aimY);
     this.aimBtnText.setPosition(aimX, aimY);
+
+    this.shockBtnBg.setPosition(shootX - 78, aimY);
+    this.shockBtnText.setPosition(shootX - 78, aimY);
+    this.updateShockButton();
 
     const harvestX = width / 2;
     const harvestY = height - 82;
@@ -1893,11 +1930,12 @@ export class OceanScene extends Phaser.Scene {
     this.noticeTimer = 2.2;
   }
 
-  private formatFishLabel(fish: { spec: FishSpec; hp: number; stunned: boolean; aggro: boolean }): string {
+  private formatFishLabel(fish: { spec: FishSpec; hp: number; stunned: boolean; aggro: boolean; status?: FishStatus }): string {
     if (fish.stunned) {
       return `💫 ${fish.spec.name} (F 수집)`;
     }
-    const prefix = fish.aggro ? '⚔️ ' : '';
+    const effects = `${fish.status?.burnRemaining ? '🔥' : ''}${fish.status?.slowRemaining ? '❄️' : ''}${fish.status?.paralyzeRemaining ? '⚡' : ''}`;
+    const prefix = effects + (fish.aggro ? '⚔️ ' : '');
     return `${prefix}${fish.spec.name} ❤️${fish.hp}/${fish.spec.hp}`;
   }
 
@@ -1974,6 +2012,7 @@ export class OceanScene extends Phaser.Scene {
       aggro: false,
       baseY: startY,
       phase: Math.random() * Math.PI * 2,
+      status: newFishStatus(),
     });
   }
 
@@ -1984,29 +2023,103 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private fireBullet() {
+    if (this.fleet.equipped === 'baby_dragon') { this.releaseAimAfterShot(); return; }
     if (this.shootCooldown > 0) return;
     const precisionShot = this.aiming;
+    const weapon = weaponForShip(this.fleet.equipped);
     this.shootCooldown = 0.22 / this.rapidFireMultiplier;
     this.audio.playShoot();
-
-    const gfx = this.add.circle(
-      this.player.x + this.aimDirection.x * 22,
-      this.player.y + this.aimDirection.y * 22,
-      precisionShot ? 8 : 6,
-      precisionShot ? 0xfde047 : 0x38bdf8
-    );
-    gfx.setStrokeStyle(2, 0xe0f2fe);
+    const x = this.player.x + this.aimDirection.x * 30;
+    const y = this.player.y + this.aimDirection.y * 30;
+    const angle = Math.atan2(this.aimDirection.y, this.aimDirection.x);
+    let gfx: Phaser.GameObjects.Shape;
+    if (weapon === 'ice') gfx = this.add.triangle(x, y, 0, 0, 28, 6, 0, 12, 0x7dd3fc).setStrokeStyle(2, 0xe0f2fe).setRotation(angle);
+    else if (weapon === 'laser') gfx = this.add.rectangle(x, y, 32, 5, 0xfde047).setStrokeStyle(1, 0xffffff).setRotation(angle);
+    else gfx = this.add.circle(x, y, weapon === 'fire' ? 9 : precisionShot ? 8 : 6,
+      weapon === 'fire' ? 0xf97316 : precisionShot ? 0xfde047 : 0x38bdf8).setStrokeStyle(2, weapon === 'fire' ? 0xfde047 : 0xe0f2fe);
     gfx.setDepth(8);
-
-    this.bullets.push({
-      gfx,
-      vx: this.aimDirection.x * (precisionShot ? 1450 : 520) * this.bulletSpeedMultiplier,
-      vy: this.aimDirection.y * (precisionShot ? 1450 : 520) * this.bulletSpeedMultiplier,
-      life: precisionShot ? 2 : 1.5,
-      piercing: precisionShot,
-      hitFish: new Set<FishEntity>(),
-    });
+    const speed = (precisionShot ? 1450 : weapon === 'laser' ? 1100 : 520) * this.bulletSpeedMultiplier;
+    this.bullets.push({ gfx, weapon, damage: this.bulletDamage * this.attackMultiplier,
+      vx: this.aimDirection.x * speed, vy: this.aimDirection.y * speed,
+      life: precisionShot ? 2 : 1.5, piercing: precisionShot || weapon === 'laser', hitFish: new Set<FishEntity>() });
     this.releaseAimAfterShot();
+  }
+
+  private damageFish(fish: FishEntity, amount: number) {
+    if (fish.stunned) return;
+    fish.hp = Math.max(0, fish.hp - amount);
+    if (fish.hp <= 0) {
+      fish.stunned = true; fish.aggro = false; fish.stunTimer = 8;
+      fish.status = newFishStatus();
+      this.audio.playStun(); fish.sprite.setAngle(180);
+    } else {
+      if (fish.spec.aggressive) fish.aggro = true;
+      this.audio.playHit();
+    }
+    this.refreshFishStatus(fish);
+  }
+
+  private refreshFishStatus(fish: FishEntity) {
+    if ('setTint' in fish.sprite) {
+      if (fish.stunned) fish.sprite.setTint(0x94a3b8);
+      else if (fish.status.paralyzeRemaining > 0) fish.sprite.setTint(0xfef08a);
+      else if (fish.status.slowRemaining > 0) fish.sprite.setTint(0x7dd3fc);
+      else if (fish.status.burnRemaining > 0) fish.sprite.setTint(0xfb923c);
+      else fish.sprite.clearTint();
+    }
+    fish.label.setText(this.formatFishLabel(fish));
+  }
+
+  private nearbyShockTargets() {
+    return this.fishList.filter(fish => !fish.stunned && Math.hypot(fish.sprite.x - this.player.x, fish.sprite.y - this.player.y) <= COMBAT.shockRadius);
+  }
+
+  private updateShockButton() {
+    if (!this.shockBtnBg) return;
+    const visible = this.fleet.equipped === 'electric';
+    const ready = visible && this.shockCooldown <= 0 && this.nearbyShockTargets().length > 0;
+    this.shockBtnBg.setVisible(visible).setFillStyle(ready ? 0xa16207 : 0x334155, ready ? 1 : 0.65);
+    this.shockBtnText.setVisible(visible).setText(this.shockCooldown > 0
+      ? `⚡ B\n${Math.ceil(this.shockCooldown)}초` : ready ? '⚡ B\n전기일격' : '⚡ B\n대상 없음');
+  }
+
+  private tryElectricShock() {
+    if (this.fleet.equipped !== 'electric') return;
+    if (this.shockCooldown > 0) { this.showNotice(`전기일격 재사용까지 ${Math.ceil(this.shockCooldown)}초`); return; }
+    const targets = this.nearbyShockTargets();
+    if (!targets.length) { this.showNotice('전기일격 범위에 물고기가 없어요.'); return; }
+    this.shockCooldown = COMBAT.shockCooldown;
+    for (const fish of targets) { fish.status.paralyzeRemaining = COMBAT.shockSeconds; this.refreshFishStatus(fish); }
+    const flash = this.add.circle(this.player.x, this.player.y, COMBAT.shockRadius, 0xfde047, 0.16)
+      .setStrokeStyle(4, 0xfef08a).setDepth(12);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 450, onComplete: () => flash.destroy() });
+    this.audio.playHit(); this.showNotice(`⚡ 물고기 ${targets.length}마리 5초 마비!`); this.updateShockButton();
+  }
+
+  private updateDragonBreath(dt: number) {
+    this.breathGraphics.clear();
+    this.breathDamageTimer = Math.max(0, this.breathDamageTimer - dt);
+    if (this.fleet.equipped !== 'baby_dragon' || !(this.shootHolding || this.keySpace?.isDown)) return;
+    this.releaseAimAfterShot();
+    const ax = this.player.x + this.aimDirection.x * 28;
+    const ay = this.player.y + this.aimDirection.y * 28;
+    const bx = ax + this.aimDirection.x * COMBAT.breathLength;
+    const by = ay + this.aimDirection.y * COMBAT.breathLength;
+    this.breathGraphics.lineStyle(COMBAT.breathRadius * 2, 0x0284c7, 0.3).lineBetween(ax, ay, bx, by);
+    this.breathGraphics.lineStyle(22, 0x38bdf8, 0.75).lineBetween(ax, ay, bx, by);
+    this.breathGraphics.lineStyle(7, 0xe0f2fe, 0.95).lineBetween(ax, ay, bx, by);
+    if (this.breathDamageTimer > 0) return;
+    this.breathDamageTimer = COMBAT.breathInterval / this.rapidFireMultiplier;
+    this.audio.playShoot();
+    for (const fish of this.fishList) {
+      if (!fish.stunned && distanceToSegment(fish.sprite.x, fish.sprite.y, ax, ay, bx, by) <= COMBAT.breathRadius + 20) this.damageFish(fish, this.bulletDamage * this.attackMultiplier);
+    }
+    const hitboxes = this.getDragonHitboxes();
+    if (this.zoneIndex === DRAGON_ZONE_INDEX && hitboxes && (this.dragonState === 'awake' || this.dragonState === 'sleeping')) {
+      if (distanceToSegment(hitboxes.head.x, hitboxes.head.y, ax, ay, bx, by) <= hitboxes.head.radius + COMBAT.breathRadius)
+        this.damageDragon(this.bulletDamage * this.attackMultiplier * 2, true, hitboxes.head.x, hitboxes.head.y);
+      else if (segmentHitsRect(ax, ay, bx, by, hitboxes.body)) this.damageDragon(this.bulletDamage * this.attackMultiplier);
+    }
   }
 
   private tryCollectNearbyFish() {
@@ -2056,9 +2169,11 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  private damagePlayer(amount: number, attackerName: string) {
+  private damagePlayer(amount: number, attackerName: string, fromFish = false) {
     if (this.playerInvuln > 0) return;
-    const reducedAmount = Math.max(1, Math.ceil(amount / this.defenseMultiplier));
+    if (fromFish && this.fleet.equipped === 'sturdy') this.armorRemaining = COMBAT.armorSeconds;
+    const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
+    const reducedAmount = Math.max(1, Math.ceil(amount / defense));
     this.playerHp = Math.max(0, this.playerHp - reducedAmount);
     this.playerInvuln = 1.0;
     this.showNotice(`${attackerName}의 공격! (-${reducedAmount} HP)`);
@@ -2117,11 +2232,14 @@ export class OceanScene extends Phaser.Scene {
       this.dragonLoot.length > 0 ? ` | 전리품: 비늘×${scaleCount} 머리뼈×${skullCount}` : '';
     const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
-    const rapidText = this.autoFireEnabled ? `난사×${this.rapidFireMultiplier}` : '난사 불가';
+    this.updateShockButton();
+    const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
+    const armorText = this.fleet.equipped === 'sturdy' && this.armorRemaining > 0 ? ` · 🛡️ ${Math.ceil(this.armorRemaining)}초` : '';
+    const rapidText = this.fleet.equipped === 'baby_dragon' ? '브레스 연속 발사' : this.autoFireEnabled ? `난사×${this.rapidFireMultiplier}` : '난사 불가';
     const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
     const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
     this.statsText.setText(
-      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${this.defenseMultiplier}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
+      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${defense}${armorText}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
     );
     const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
     const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
@@ -2154,10 +2272,15 @@ export class OceanScene extends Phaser.Scene {
 
     this.updateAimingInput();
     const dt = rawDt * (this.aiming ? 0.25 : 1);
+    this.armorRemaining = Math.max(0, this.armorRemaining - rawDt);
+    this.shockCooldown = Math.max(0, this.shockCooldown - rawDt);
+    this.armorGraphics.clear();
+    if (this.fleet.equipped === 'sturdy' && this.armorRemaining > 0)
+      this.armorGraphics.lineStyle(3, 0xcbd5e1, 0.85).strokeCircle(this.player.x, this.player.y, 36);
     this.updateOreRespawns(rawDt);
 
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
-    if (this.autoFireEnabled && this.shootHolding && this.shootCooldown <= 0) {
+    if (this.fleet.equipped !== 'baby_dragon' && this.autoFireEnabled && this.shootHolding && this.shootCooldown <= 0) {
       this.fireBullet();
     }
 
@@ -2244,6 +2367,7 @@ export class OceanScene extends Phaser.Scene {
         this.fireBullet();
       }
     }
+    if (this.keyB && Phaser.Input.Keyboard.JustDown(this.keyB)) this.tryElectricShock();
     if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
       this.tryCollectNearbyFish();
     }
@@ -2286,9 +2410,11 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.updateDragon(dt);
+    this.updateDragonBreath(dt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      const previousX = b.gfx.x; const previousY = b.gfx.y;
       b.gfx.x += b.vx * dt;
       b.gfx.y += b.vy * dt;
       b.life -= dt;
@@ -2300,41 +2426,28 @@ export class OceanScene extends Phaser.Scene {
         this.dragonSprite?.visible &&
         (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
         dragonHitboxes &&
-        Phaser.Geom.Circle.Contains(dragonHitboxes.head, b.gfx.x, b.gfx.y)
+        distanceToSegment(dragonHitboxes.head.x, dragonHitboxes.head.y, previousX, previousY, b.gfx.x, b.gfx.y) <= dragonHitboxes.head.radius
       ) {
-        this.damageDragon(this.bulletDamage * this.attackMultiplier * 2, true, b.gfx.x, b.gfx.y);
+        this.damageDragon(b.damage * 2, true, b.gfx.x, b.gfx.y);
         hit = true;
       } else if (
         this.zoneIndex === DRAGON_ZONE_INDEX &&
         this.dragonSprite?.visible &&
         (this.dragonState === 'sleeping' || this.dragonState === 'awake') &&
         dragonHitboxes &&
-        Phaser.Geom.Rectangle.Contains(dragonHitboxes.body, b.gfx.x, b.gfx.y)
+        segmentHitsRect(previousX, previousY, b.gfx.x, b.gfx.y, dragonHitboxes.body)
       ) {
-        this.damageDragon(this.bulletDamage * this.attackMultiplier);
+        this.damageDragon(b.damage);
         hit = true;
       }
       for (const fish of this.fishList) {
         if (hit) break;
         if (fish.stunned || b.hitFish.has(fish)) continue;
-        if (Phaser.Math.Distance.Between(b.gfx.x, b.gfx.y, fish.sprite.x, fish.sprite.y) < 38) {
+        if (distanceToSegment(fish.sprite.x, fish.sprite.y, previousX, previousY, b.gfx.x, b.gfx.y) < 38) {
           b.hitFish.add(fish);
-          fish.hp = Math.max(0, fish.hp - this.bulletDamage * this.attackMultiplier);
+          this.damageFish(fish, b.damage);
+          if (!fish.stunned) { applyWeaponStatus(fish.status, b.weapon); this.refreshFishStatus(fish); }
           hit = !b.piercing;
-          if (fish.hp <= 0) {
-            fish.stunned = true;
-            fish.aggro = false;
-            fish.stunTimer = 8;
-            this.audio.playStun();
-            if ('setTint' in fish.sprite) {
-              fish.sprite.setTint(0x94a3b8);
-            }
-            fish.sprite.setAngle(180);
-          } else {
-            if (fish.spec.aggressive) fish.aggro = true;
-            this.audio.playHit();
-          }
-          fish.label.setText(this.formatFishLabel(fish));
           if (!b.piercing) break;
         }
       }
@@ -2354,6 +2467,10 @@ export class OceanScene extends Phaser.Scene {
 
     for (let i = this.fishList.length - 1; i >= 0; i--) {
       const fish = this.fishList[i];
+      const fishDt = rawDt > 0 ? fishMovementSeconds(fish.status, rawDt) * dt / rawDt : 0;
+      const burnDamage = tickFishStatus(fish.status, rawDt);
+      if (burnDamage > 0) this.damageFish(fish, burnDamage);
+      this.refreshFishStatus(fish);
       if (fish.stunned) {
         fish.stunTimer -= dt;
         if (fish.stunTimer <= 0) {
@@ -2366,16 +2483,18 @@ export class OceanScene extends Phaser.Scene {
           fish.sprite.setAngle(0);
           fish.label.setText(this.formatFishLabel(fish));
         }
+      } else if (fishDt <= 0) {
+        // 마비는 이동과 접촉 공격만 막으며 수집 가능한 기절 상태와 구분합니다.
       } else if (fish.aggro) {
         const dx = this.player.x - fish.sprite.x;
         const dy = this.player.y - fish.sprite.y;
         const dist = Math.hypot(dx, dy) || 1;
         const chaseSpeed = fish.spec.speed * 1.15;
-        fish.sprite.x += (dx / dist) * chaseSpeed * dt;
-        fish.sprite.y += (dy / dist) * chaseSpeed * dt;
+        fish.sprite.x += (dx / dist) * chaseSpeed * fishDt;
+        fish.sprite.y += (dy / dist) * chaseSpeed * fishDt;
         this.setFishFacing(fish.sprite, fish.spec, dx > 0);
         if (dist < 34) {
-          this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name);
+          this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name, true);
         }
       } else {
         if (this.zoneIndex >= 2 && fish.spec.aggressive) {
@@ -2385,8 +2504,8 @@ export class OceanScene extends Phaser.Scene {
             fish.label.setText(this.formatFishLabel(fish));
           }
         }
-        fish.phase += dt * 2.5;
-        fish.sprite.x += fish.vx * dt;
+        fish.phase += fishDt * 2.5;
+        fish.sprite.x += fish.vx * fishDt;
         fish.sprite.y = fish.baseY + Math.sin(fish.phase) * 12;
 
         if (fish.sprite.x < -50 && fish.vx < 0) {

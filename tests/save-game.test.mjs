@@ -83,3 +83,10 @@ test('legacy fleet saves migrate without changing minerals or dragon loot', () =
   data.submarines.equipped = 'baby_dragon';
   assert.equal(writeSave(data), false);
 });
+
+test('electric cooldown and armor duration survive save/load and reject out of range timers', () => {
+  const data = { ...sample(), combat: { armorRemaining: 3.5, shockCooldown: 27 } };
+  assert.equal(writeSave(data), true); assert.deepEqual(readSave().data.combat, data.combat);
+  data.combat.shockCooldown = 31; assert.equal(writeSave(data), false);
+  data.combat.shockCooldown = 0; data.combat.armorRemaining = -1; assert.equal(writeSave(data), false);
+});
