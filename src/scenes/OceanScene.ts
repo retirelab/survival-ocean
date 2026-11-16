@@ -1309,7 +1309,6 @@ export class OceanScene extends Phaser.Scene {
     if (this.dragonState !== 'sleeping') return;
     this.dragonState = 'awake';
     this.dragonAttackCooldown = 2.5;
-    this.audio.setDragonBattle(true);
     this.applyDragonAppearance();
     this.showNotice('수룡이 깨어났습니다! 공격 전 붉은 위험 표시에서 벗어나세요!');
   }
@@ -1385,7 +1384,6 @@ export class OceanScene extends Phaser.Scene {
       this.dragonSprite.setAngle(0);
     }
     this.clearDragonDanger();
-    this.audio.setDragonBattle(false);
     this.audio.playBossVictory();
     this.applyDragonAppearance();
     this.showNotice('수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)');
@@ -1613,7 +1611,6 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private beginDragonRespawn() {
-    this.audio.setDragonBattle(false);
     this.dragonSprite?.destroy();
     this.dragonStatusText?.destroy();
     this.dragonSprite = undefined;
@@ -1698,7 +1695,6 @@ export class OceanScene extends Phaser.Scene {
     this.dragonStatusText?.setVisible(visible);
     this.dragonRespawnText?.setVisible(visible && this.dragonState === 'respawning');
     if (!visible) {
-      this.audio.setDragonBattle(false);
       this.clearDragonDanger();
       this.dragonBossBar.clear();
       this.dragonBossText.setVisible(false);
@@ -2209,7 +2205,6 @@ export class OceanScene extends Phaser.Scene {
     this.updateMiningInteraction();
     if (this.zoneIndex === DRAGON_ZONE_INDEX) {
       this.ensureDragonVisual();
-      this.audio.setDragonBattle(this.dragonState === 'awake');
     } else {
       this.spawnFishWave(6);
     }
