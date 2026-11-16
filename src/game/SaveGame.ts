@@ -1,4 +1,4 @@
-import { isFleetState, type FleetState } from './Submarines.js';
+import { normalizeFleet, type FleetState } from './Submarines.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
 
@@ -34,7 +34,7 @@ const strings = (value: unknown, max: number) => Array.isArray(value) && value.l
 export function isSaveGame(value: unknown): value is SaveGame {
   if (!object(value) || value.version !== 1 || !number(value.savedAt, 0, 1e15) ||
       !integer(value.zoneIndex, 0, 3) || !integer(value.level, 1, 20) ||
-      (value.submarines !== undefined && !isFleetState(value.submarines))) return false;
+      (value.submarines !== undefined && !normalizeFleet(value.submarines))) return false;
   const { player: p, stats: s, dragon: d, menu: m, upgrades: u, minerals: minerals } = value;
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
   return number(p.x, 0, 1) && number(p.y, 0, 1) && (p.facing === 1 || p.facing === -1) && number(p.hp, 1, 250) &&
@@ -58,6 +58,7 @@ export function readSave(): { data: SaveGame | null; error: string | null } {
     if (!raw) return { data: null, error: null };
     const data: unknown = JSON.parse(raw);
     if (!isSaveGame(data)) throw new Error('invalid save');
+    if (data.submarines) data.submarines = normalizeFleet(data.submarines)!;
     return { data, error: null };
   } catch {
     return { data: null, error: '저장 데이터를 읽을 수 없어요. 브라우저 저장 설정 또는 저장 파일을 확인하세요.' };

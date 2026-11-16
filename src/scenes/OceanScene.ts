@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
 import { SubmarinePanel } from '../game/SubmarinePanel';
-import { SUBMARINES, getSubmarine, newFleet, buyOrEquip, submarineImage } from '../game/Submarines';
+import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, inventoryResources, submarineImage } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
 import { readSave, writeSave, type SaveGame } from '../game/SaveGame';
 
@@ -443,7 +443,7 @@ export class OceanScene extends Phaser.Scene {
         return saved;
       },
     });
-    this.submarinePanel = new SubmarinePanel(this.fleet, {
+    this.submarinePanel = new SubmarinePanel(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot), {
       open: () => this.pauseControls?.openOverlay() ?? false,
       close: () => this.pauseControls?.closeOverlay(),
       select: id => this.selectSubmarine(id),
@@ -474,14 +474,25 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private selectSubmarine(id: string): string | null {
-    const previous = this.fleet;
-    const result = buyOrEquip(previous, id);
+    const previous = { fleet: this.fleet, minerals: this.mineralInventory, loot: this.dragonLoot };
+    const result = craftOrEquip(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot), id);
     if (result.error) return result.error;
     this.fleet = result.state;
+    this.mineralInventory = { ...previous.minerals };
+    for (const name of Object.keys(this.mineralInventory) as MineralType[]) this.mineralInventory[name] = result.resources[name];
+    let skulls = result.resources['수룡의 머리뼈'];
+    let scales = result.resources['수룡의 비늘'];
+    this.dragonLoot = previous.loot.filter(name => {
+      if (name === '수룡의 머리뼈') return skulls-- > 0;
+      if (name === '수룡의 비늘') return scales-- > 0;
+      return true;
+    });
     const data = this.captureSave();
     if (!writeSave(data)) {
-      this.fleet = previous;
-      return '저장하지 못해 구매·교체를 취소했어요. 코인은 사용되지 않았어요.';
+      this.fleet = previous.fleet;
+      this.mineralInventory = previous.minerals;
+      this.dragonLoot = previous.loot;
+      return '저장하지 못해 제작·교체를 취소했어요. 재료는 사용되지 않았어요.';
     }
     this.savedGame = { data, error: null };
     this.applySubmarine();
@@ -493,7 +504,7 @@ export class OceanScene extends Phaser.Scene {
     const sub = getSubmarine(this.fleet.equipped);
     this.submarineSprite?.setTexture(`submarine-${sub.id}`).setDisplaySize(62, 37);
     this.speed = 250 * sub.speed;
-    this.submarinePanel?.update(this.fleet);
+    this.submarinePanel?.update(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot));
   }
 
   private resetHeldInput() {
@@ -512,7 +523,7 @@ export class OceanScene extends Phaser.Scene {
   private captureSave(): SaveGame {
     const { width, height } = this.scale;
     return {
-      submarines: { coins: this.fleet.coins, owned: [...this.fleet.owned], equipped: this.fleet.equipped },
+      submarines: { owned: [...this.fleet.owned], equipped: this.fleet.equipped },
       version: 1, savedAt: Date.now(), zoneIndex: this.zoneIndex, level: this.level,
       player: { x: this.player.x / width, y: this.player.y / height, facing: this.facing, hp: this.playerHp },
       bag: [...this.bag], dragonLoot: [...this.dragonLoot], minerals: { ...this.mineralInventory },
@@ -1666,7 +1677,6 @@ export class OceanScene extends Phaser.Scene {
       return;
     }
     const count = this.bag.length;
-    this.fleet.coins = Math.min(1e9, this.fleet.coins + count * 10);
     this.bag = [];
     if (count >= this.maxBag) {
       if (this.level < this.maxLevel) {
@@ -1681,7 +1691,6 @@ export class OceanScene extends Phaser.Scene {
       this.audio.playTank();
       this.showNotice(`수조에 ${count}마리를 비웠어요! (${this.maxBag}마리 가득 채워 비우면 Lv UP)`);
     }
-    this.showNotice(`${this.noticeText.text}\n🪙 +${count * 10}코인! (보유 ${this.fleet.coins.toLocaleString()}코인)`);
     this.updateHud();
   }
 
@@ -2101,7 +2110,7 @@ export class OceanScene extends Phaser.Scene {
     this.hudText.setText(compactHud
       ? `🌊 ${zone.name}(${depth}m)\n⭐ Lv.${this.level}/${this.maxLevel}\n❤️ ${this.playerHp}/${this.maxHp}`
       : `🌊 ${zone.name}(${depth}m) | ⭐ Lv.${this.level}/${this.maxLevel} | ❤️ ${this.playerHp}/${this.maxHp}`);
-    this.submarinePanel?.update(this.fleet);
+    this.submarinePanel?.update(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot));
     const scaleCount = this.dragonLoot.filter((loot) => loot === '수룡의 비늘').length;
     const skullCount = this.dragonLoot.filter((loot) => loot === '수룡의 머리뼈').length;
     const lootSummary =

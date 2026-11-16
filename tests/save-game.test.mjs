@@ -69,12 +69,17 @@ test('storage disabled or full returns failure without deleting the prior save',
 });
 
 
-test('legacy saves stay readable and new saves preserve purchased submarines', () => {
+test('legacy fleet saves migrate without changing minerals or dragon loot', () => {
   assert.equal(writeSave(sample()), true);
   assert.equal(readSave().data.submarines, undefined);
-  const data = { ...sample(), submarines: { coins: 427, owned: ['basic', 'coral'], equipped: 'coral' } };
+  const old = { ...sample(), submarines: { coins: 427, owned: ['basic', 'coral', 'abyss', 'gold'], equipped: 'gold' } };
+  entries.set(SAVE_KEY, JSON.stringify(old));
+  const data = readSave().data;
+  assert.deepEqual(data.submarines, { owned: ['basic', 'sturdy', 'ice', 'metal'], equipped: 'metal' });
+  assert.deepEqual(data.minerals, old.minerals);
+  assert.deepEqual(data.dragonLoot, old.dragonLoot);
   assert.equal(writeSave(data), true);
-  assert.deepEqual(readSave().data.submarines, data.submarines);
-  data.submarines.equipped = 'gold';
+  assert.deepEqual(readSave().data, data);
+  data.submarines.equipped = 'baby_dragon';
   assert.equal(writeSave(data), false);
 });
