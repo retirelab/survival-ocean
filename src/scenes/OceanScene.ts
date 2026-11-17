@@ -86,6 +86,9 @@ const ZONES: ZoneConfig[] = [
   { id: 1, name: '중심층', minDepth: 100, maxDepth: 200, reqLevel: 5, topColor: 0x0284c7, bottomColor: 0x1e3a8a, floorColor: 0x312e81 },
   { id: 2, name: '심해', minDepth: 200, maxDepth: 300, reqLevel: 10, topColor: 0x1e1b4b, bottomColor: 0x0f172a, floorColor: 0x090d16 },
   { id: 3, name: '지하세계', minDepth: 300, maxDepth: 400, reqLevel: 18, topColor: 0x0f172a, bottomColor: 0x042f2e, floorColor: 0x134e4a },
+  { id: 4, name: '빙하수 골짜기', minDepth: 400, maxDepth: 500, reqLevel: 18, topColor: 0x075985, bottomColor: 0x0c4a6e, floorColor: 0x67e8f9 },
+  { id: 5, name: '지하세계 2층', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x172554, bottomColor: 0x111827, floorColor: 0x9a3412 },
+  { id: 6, name: '열수분출공층', minDepth: 600, maxDepth: 700, reqLevel: 18, topColor: 0x0f172a, bottomColor: 0x030712, floorColor: 0x292524 },
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
@@ -183,7 +186,8 @@ export class OceanScene extends Phaser.Scene {
 
   private zoneIndex = 0;
   private level = 1;
-  private readonly maxLevel = 20;
+  private maxLevel = 20;
+  private maxLevelExpanded = false;
   private bag: string[] = [];
   private readonly maxBag = 12;
   private readonly maxFishPerZone = 12;
@@ -257,6 +261,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonBossBar!: Phaser.GameObjects.Graphics;
   private dragonBossText!: Phaser.GameObjects.Text;
   private dragonLoot: string[] = [];
+  private dragonPassUnlocked = false;
 
   private menuMode: MenuMode = null;
   private menuStage = 0;
@@ -1146,7 +1151,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private requestZoneChange(nextIndex: number, spawnY: number) {
-    if (nextIndex > this.zoneIndex && !this.completedUpgradeStages.has(nextIndex)) {
+    if (nextIndex <= DRAGON_ZONE_INDEX && nextIndex > this.zoneIndex && !this.completedUpgradeStages.has(nextIndex)) {
       this.showUpgradeMenu(nextIndex, { zoneIndex: nextIndex, spawnY });
       return;
     }
@@ -1587,10 +1592,12 @@ export class OceanScene extends Phaser.Scene {
     this.audio.playCollect();
     this.showDragonLoot(reward);
     this.applyDragonAppearance();
-    this.showNotice(`${reward} 획득! 갈무리 ${this.dragonHarvests}/3`);
-
     if (this.dragonHarvests >= 3) {
+      this.dragonPassUnlocked = true;
+      this.showNotice(`${reward} 획득! 갈무리 3/3\n🔓 아래쪽 빙하수 골짜기로 향하는 통로가 열렸습니다!`);
       this.time.delayedCall(450, () => this.beginDragonRespawn());
+    } else {
+      this.showNotice(`${reward} 획득! 갈무리 ${this.dragonHarvests}/3`);
     }
     this.updateHud();
   }
@@ -1620,7 +1627,7 @@ export class OceanScene extends Phaser.Scene {
     this.harvestBtnBg.setVisible(false);
     this.harvestBtnText.setVisible(false);
     this.ensureDragonVisual();
-    this.showNotice('갈무리를 마쳤습니다. 수룡은 5분 뒤 이 자리에서 부활합니다.');
+    this.showNotice('갈무리를 마쳤습니다. 아래 통로가 열렸습니다!\n수룡은 5분 뒤 이 자리에서 부활합니다.');
   }
 
   private updateDragon(dt: number) {
@@ -1759,11 +1766,91 @@ export class OceanScene extends Phaser.Scene {
     } else if (this.zoneIndex === 2) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.95);
       this.decoGraphics.fillRect(0, height - 20, width, 20);
-    } else {
+    } else if (this.zoneIndex === 3) {
       this.decoGraphics.fillStyle(zone.floorColor, 1);
       this.decoGraphics.fillRect(0, height - 36, width, 36);
       this.decoGraphics.fillStyle(0xef4444, 0.9);
       this.decoGraphics.fillCircle(width - 50, height - 24, 12);
+    } else if (this.zoneIndex === 4) {
+      this.drawGlacialValley(width, height);
+    } else if (this.zoneIndex === 5) {
+      this.drawUnderworldSecondFloor(width, height);
+    } else {
+      this.drawHydrothermalVents(width, height);
+    }
+  }
+
+  private drawGlacialValley(width: number, height: number) {
+    const g = this.decoGraphics;
+    g.fillStyle(0x7dd3fc, 0.96);
+    g.fillRect(0, 0, width, 54);
+    g.fillRect(0, height - 66, width, 66);
+    g.fillStyle(0xbae6fd, 0.95);
+    const step = Math.max(64, width / 9);
+    for (let x = -step; x < width + step; x += step) {
+      const topLength = 48 + ((Math.floor(x / step) + 12) % 3) * 28;
+      const bottomLength = 50 + ((Math.floor(x / step) + 11) % 4) * 22;
+      g.fillTriangle(x, 50, x + step * 0.48, 50 + topLength, x + step, 50);
+      g.fillTriangle(x, height - 62, x + step * 0.48, height - 62 - bottomLength, x + step, height - 62);
+    }
+    g.lineStyle(4, 0xe0f2fe, 0.8);
+    g.lineBetween(0, 54, width, 54);
+    g.lineBetween(0, height - 66, width, height - 66);
+    g.fillStyle(0xffffff, 0.38);
+    for (let index = 0; index < 12; index++) {
+      g.fillCircle(width * ((index * 37) % 100) / 100, 100 + ((index * 83) % Math.max(120, height - 220)), 3 + (index % 3));
+    }
+  }
+
+  private drawUnderworldSecondFloor(width: number, height: number) {
+    const g = this.decoGraphics;
+    g.fillStyle(0x7c2d12, 0.94);
+    g.fillRect(0, height - 58, width, 58);
+    g.fillStyle(0xc2410c, 0.92);
+    g.fillRoundedRect(width * 0.68, height * 0.08, width * 0.34, height * 0.3, 18);
+    g.fillRoundedRect(-width * 0.06, height * 0.57, width * 0.38, height * 0.24, 18);
+    g.fillStyle(0xfb923c, 0.72);
+    g.fillTriangle(width * 0.68, height * 0.38, width * 0.75, height * 0.48, width * 0.82, height * 0.38);
+    g.fillTriangle(width * 0.86, height * 0.38, width * 0.92, height * 0.5, width, height * 0.38);
+    g.fillTriangle(width * 0.06, height * 0.57, width * 0.13, height * 0.48, width * 0.2, height * 0.57);
+    g.lineStyle(5, 0xfdba74, 0.5);
+    g.lineBetween(width * 0.7, height * 0.18, width * 0.95, height * 0.3);
+    g.lineBetween(width * 0.03, height * 0.68, width * 0.28, height * 0.62);
+    g.fillStyle(0x38bdf8, 0.62);
+    for (let index = 0; index < 11; index++) {
+      const bx = width * (0.12 + ((index * 19) % 70) / 100);
+      const by = height * (0.18 + ((index * 13) % 64) / 100);
+      g.fillCircle(bx, by, 3 + (index % 4));
+    }
+  }
+
+  private drawHydrothermalVents(width: number, height: number) {
+    const g = this.decoGraphics;
+    g.fillStyle(0x1c1917, 1);
+    g.fillRect(0, height - 50, width, 50);
+    const vents = [
+      { x: width * 0.22, y: height - 48, w: 105, h: 235 },
+      { x: width * 0.55, y: height - 48, w: 130, h: 315 },
+      { x: width * 0.82, y: height - 48, w: 90, h: 195 },
+    ];
+    for (const vent of vents) {
+      g.fillStyle(0x3f3f46, 1);
+      g.fillTriangle(vent.x - vent.w / 2, vent.y, vent.x - vent.w * 0.28, vent.y - vent.h, vent.x + vent.w / 2, vent.y);
+      g.fillStyle(0x18181b, 1);
+      g.fillEllipse(vent.x - vent.w * 0.1, vent.y - vent.h, vent.w * 0.56, 24);
+      g.fillStyle(0xf97316, 0.95);
+      g.fillEllipse(vent.x - vent.w * 0.1, vent.y - vent.h + 2, vent.w * 0.4, 13);
+      g.lineStyle(5, 0xef4444, 0.9);
+      g.lineBetween(vent.x - vent.w * 0.18, vent.y - vent.h * 0.78, vent.x, vent.y - vent.h * 0.35);
+      g.lineBetween(vent.x, vent.y - vent.h * 0.35, vent.x - vent.w * 0.2, vent.y - 18);
+      g.fillStyle(0x38bdf8, 0.7);
+      for (let bubble = 0; bubble < 6; bubble++) {
+        g.fillCircle(
+          vent.x - vent.w * 0.1 + Math.sin(bubble * 2.1) * 18,
+          vent.y - vent.h - 28 - bubble * 32,
+          3 + (bubble % 3) * 2
+        );
+      }
     }
   }
 
@@ -2196,6 +2283,12 @@ export class OceanScene extends Phaser.Scene {
     }
     this.fishList = [];
     this.zoneIndex = nextIndex;
+    const expandedNow = this.zoneIndex === 4 && !this.maxLevelExpanded;
+    if (expandedNow) {
+      this.maxLevelExpanded = true;
+      this.maxLevel = 40;
+      this.audio.playLevelUp();
+    }
     this.audio.setZone(this.zoneIndex);
     if (playSound) {
       this.audio.playZoneChange(nextIndex > previousZoneIndex);
@@ -2208,7 +2301,11 @@ export class OceanScene extends Phaser.Scene {
     } else {
       this.spawnFishWave(6);
     }
-    this.showNotice(`${ZONES[this.zoneIndex].name} (${ZONES[this.zoneIndex].minDepth}m~${ZONES[this.zoneIndex].maxDepth}m) 진입!`);
+    this.showNotice(
+      `${ZONES[this.zoneIndex].name} (${ZONES[this.zoneIndex].minDepth}m~${ZONES[this.zoneIndex].maxDepth}m) 진입!${
+        expandedNow ? '\n⭐ 최대 레벨이 Lv.40으로 확장되었습니다!' : ''
+      }`
+    );
     this.updateHud();
   }
 
@@ -2383,6 +2480,12 @@ export class OceanScene extends Phaser.Scene {
     }
 
     if (this.player.y >= height - 22 && this.zoneIndex < ZONES.length - 1) {
+      if (this.zoneIndex === DRAGON_ZONE_INDEX && !this.dragonPassUnlocked) {
+        this.player.y = height - 26;
+        this.audio.playDenied();
+        this.showNotice('수룡을 토벌하고 사체를 세 번 모두 갈무리해야 아래 통로가 열립니다!');
+        return;
+      }
       const nextZone = ZONES[this.zoneIndex + 1];
       if (this.level >= nextZone.reqLevel) {
         this.requestZoneChange(this.zoneIndex + 1, 56);
