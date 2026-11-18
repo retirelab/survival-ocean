@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HELICOPRION, BOMB_SPOTS, chooseAttack, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave,
+  HELICOPRION, HELICOPRION_HARVEST_REWARDS, BOMB_SPOTS, chooseAttack, harvestHelicoprion, helicoprionStatus, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave,
 } from '../.test-build/Helicoprion.js';
 
 test('boss numbers follow the design', () => {
@@ -9,7 +9,7 @@ test('boss numbers follow the design', () => {
   assert.equal(HELICOPRION.attack, 30);
   assert.equal(HELICOPRION.bombDamage, 500);
   assert.equal(BOMB_SPOTS.length, 4);
-  assert.deepEqual(newHelicoprion(), { hp: 2000, respawn: 0, bombs: [0, 0, 0, 0] });
+  assert.deepEqual(newHelicoprion(), { hp: 2000, respawn: 0, harvests: 0, bombs: [0, 0, 0, 0] });
   assert.equal(isHelicoprionSave(newHelicoprion()), true);
 });
 
@@ -46,4 +46,27 @@ test('exploded bombs come back after their respawn time', () => {
   assert.deepEqual(bombs, [0, HELICOPRION.bombRespawnSeconds - 2, 1, 0]);
   assert.deepEqual(tickBombs(bombs, 1.5), [2]);
   assert.equal(bombs[2], 0);
+});
+
+test('the grey corpse gives five harvests, then the boss starts its respawn timer', () => {
+  const boss = { ...newHelicoprion(), hp: 0 };
+  assert.equal(helicoprionStatus(boss), 'dead');
+  const rewards = [];
+  for (let i = 0; i < 5; i++) rewards.push(harvestHelicoprion(boss));
+  assert.deepEqual(rewards, ['헬리코프리온의 아래턱', '헬리코프리온의 살점', '헬리코프리온의 살점', '헬리코프리온의 비늘', '낡은 고대의 편지']);
+  assert.deepEqual(rewards, [...HELICOPRION_HARVEST_REWARDS]);
+  assert.equal(helicoprionStatus(boss), 'respawning');
+  assert.equal(boss.respawn, HELICOPRION.respawnSeconds);
+  assert.equal(harvestHelicoprion(boss), null);
+});
+
+test('a living or respawning boss cannot be harvested and harvest progress is validated', () => {
+  assert.equal(harvestHelicoprion(newHelicoprion()), null);
+  assert.equal(harvestHelicoprion({ ...newHelicoprion(), hp: 0, respawn: 30 }), null);
+  const halfway = { hp: 0, respawn: 0, harvests: 3, bombs: [0, 0, 0, 0] };
+  assert.equal(isHelicoprionSave(halfway), true);
+  assert.equal(harvestHelicoprion(halfway), '헬리코프리온의 비늘');
+  // 예전 저장(harvests 없음)도 그대로 읽습니다.
+  assert.equal(isHelicoprionSave({ hp: 0, respawn: 0, bombs: [0, 0, 0, 0] }), true);
+  for (const harvests of [5, -1, 1.5]) assert.equal(isHelicoprionSave({ ...halfway, harvests }), false);
 });

@@ -18,6 +18,8 @@ export const HELICOPRION = {
   idleKeepDistance: 150,
   bombRespawnSeconds: 20,
   respawnSeconds: 5 * 60,
+  harvestCount: 5,
+  harvestRange: 150,
   /** 전투 시작·이어하기 직후 첫 공격까지 최소 대기 */
   openingDelay: 2.5,
 } as const;
@@ -39,24 +41,58 @@ export const NEST_HILLS: ReadonlyArray<readonly [number, number]> = [
 /** 노란 출입구(왼쪽 위 모서리) 영역. 지하세계 2층으로 돌아갑니다. */
 export const NEST_ENTRANCE = { width: 0.17, height: 0.3 } as const;
 
+/** 갈무리 보상(순서대로 한 번에 하나씩, 총 5회) */
+export const HELICOPRION_HARVEST_REWARDS = [
+  '헬리코프리온의 아래턱',
+  '헬리코프리온의 살점',
+  '헬리코프리온의 살점',
+  '헬리코프리온의 비늘',
+  '낡은 고대의 편지',
+] as const;
+
 export type HelicoprionAttack = 'charge' | 'jaw';
+export type HelicoprionStatus = 'alive' | 'dead' | 'respawning';
 
 export interface HelicoprionSave {
   hp: number;
-  /** 0이면 살아 있음, 0보다 크면 부활까지 남은 초 */
+  /** 0보다 크면 부활까지 남은 초 */
   respawn: number;
+  /** 사체에서 갈무리한 횟수. hp 0·respawn 0이면 회색 사체로 남아 있습니다. 예전 저장에는 없습니다. */
+  harvests?: number;
   /** 폭탄별 재생까지 남은 초. 0이면 설치되어 있음 */
   bombs: number[];
 }
 
 export function newHelicoprion(): HelicoprionSave {
-  return { hp: HELICOPRION.maxHp, respawn: 0, bombs: BOMB_SPOTS.map(() => 0) };
+  return { hp: HELICOPRION.maxHp, respawn: 0, harvests: 0, bombs: BOMB_SPOTS.map(() => 0) };
+}
+
+export function helicoprionStatus(save: HelicoprionSave): HelicoprionStatus {
+  if (save.respawn > 0) return 'respawning';
+  return save.hp <= 0 ? 'dead' : 'alive';
+}
+
+/**
+ * 사체를 한 번 갈무리합니다. 받은 보상을 돌려주고, 다섯 번째 갈무리 뒤에는 부활 대기를 시작합니다.
+ * 갈무리할 수 없으면 null.
+ */
+export function harvestHelicoprion(save: HelicoprionSave): string | null {
+  const harvests = save.harvests ?? 0;
+  if (helicoprionStatus(save) !== 'dead' || harvests >= HELICOPRION.harvestCount) return null;
+  const reward = HELICOPRION_HARVEST_REWARDS[harvests];
+  save.harvests = harvests + 1;
+  if (save.harvests >= HELICOPRION.harvestCount) {
+    save.respawn = HELICOPRION.respawnSeconds;
+    save.harvests = 0;
+  }
+  return reward;
 }
 
 export function isHelicoprionSave(value: unknown): value is HelicoprionSave {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   const finite = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
+  if (v.harvests !== undefined && !(Number.isInteger(v.harvests) && finite(v.harvests, 0, HELICOPRION.harvestCount - 1))) return false;
   return finite(v.hp, 0, HELICOPRION.maxHp) && finite(v.respawn, 0, HELICOPRION.respawnSeconds) &&
     Array.isArray(v.bombs) && v.bombs.length === BOMB_SPOTS.length &&
     v.bombs.every(t => finite(t, 0, HELICOPRION.bombRespawnSeconds));

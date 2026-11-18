@@ -3,7 +3,8 @@ import type { GameAudio } from '../audio/GameAudio';
 import { BOSS_TRACKS } from '../game/ZoneMusic';
 import {
   BOMB_SPOTS, HELICOPRION as H, NEST_ENTRANCE, NEST_HILLS,
-  bombHitDuringCharge, chooseAttack, distanceToBounds, newHelicoprion, segmentPointDistance, tickBombs,
+  bombHitDuringCharge, chooseAttack, distanceToBounds, harvestHelicoprion, helicoprionStatus, newHelicoprion,
+  segmentPointDistance, tickBombs,
   type HelicoprionSave,
 } from '../game/Helicoprion';
 
@@ -11,7 +12,16 @@ export interface HelicoprionHost {
   player(): { x: number; y: number };
   damagePlayer(amount: number, attacker: string): void;
   showNotice(message: string): void;
+  setHarvestButton(visible: boolean): void;
+  addLoot(item: string): void;
 }
+
+const LOOT_ICONS: Record<string, string> = {
+  '헬리코프리온의 아래턱': '🦷',
+  '헬리코프리온의 살점': '🥩',
+  '헬리코프리온의 비늘': '💠',
+  '낡은 고대의 편지': '📜',
+};
 
 type Phase = 'idle' | 'chargeWindup' | 'charging' | 'jawWindup' | 'recover' | 'stunned';
 
@@ -50,6 +60,7 @@ export class HelicoprionBoss {
   private bar?: Phaser.GameObjects.Graphics;
   private barText?: Phaser.GameObjects.Text;
   private respawnText?: Phaser.GameObjects.Text;
+  private corpseText?: Phaser.GameObjects.Text;
 
   static preload(scene: Phaser.Scene) {
     scene.load.image('helicoprion_body', 'assets/boss/helicoprion-body.png');
@@ -90,11 +101,11 @@ export class HelicoprionBoss {
   ) {}
 
   load(save: HelicoprionSave | undefined) {
-    this.state = save ? { ...save, bombs: [...save.bombs] } : newHelicoprion();
+    this.state = save ? { ...save, harvests: save.harvests ?? 0, bombs: [...save.bombs] } : newHelicoprion();
   }
 
   snapshot(): HelicoprionSave {
-    return { hp: this.state.hp, respawn: this.state.respawn, bombs: [...this.state.bombs] };
+    return { hp: this.state.hp, respawn: this.state.respawn, harvests: this.state.harvests ?? 0, bombs: [...this.state.bombs] };
   }
 
   get fighting() {
@@ -118,7 +129,9 @@ export class HelicoprionBoss {
     this.y = height * 0.42;
     this.heading = Math.PI;
     this.layout(width, height);
-    if (this.state.respawn > 0) this.showRespawnTimer();
+    const status = helicoprionStatus(this.state);
+    if (status === 'respawning') this.showRespawnTimer();
+    else if (status === 'dead') this.showCorpse();
     else this.startFight();
   }
 
@@ -126,11 +139,12 @@ export class HelicoprionBoss {
     if (!this.active) return;
     this.active = false;
     this.audio.setBossMusic(null);
+    this.host.setHarvestButton(false);
     this.destroyBossSprite();
     for (const bomb of this.bombs) bomb.destroy();
     this.bombs = [];
-    for (const object of [this.danger, this.dangerText, this.bar, this.barText, this.respawnText]) object?.destroy();
-    this.danger = this.dangerText = this.bar = this.barText = this.respawnText = undefined;
+    for (const object of [this.danger, this.dangerText, this.bar, this.barText, this.respawnText, this.corpseText]) object?.destroy();
+    this.danger = this.dangerText = this.bar = this.barText = this.respawnText = this.corpseText = undefined;
     this.charge = undefined;
   }
 
@@ -147,6 +161,7 @@ export class HelicoprionBoss {
     });
     this.barText?.setPosition(width / 2, 145);
     this.respawnText?.setPosition(width * 0.6, height * 0.42);
+    this.layoutCorpseText();
     this.drawBar();
   }
 
@@ -156,6 +171,7 @@ export class HelicoprionBoss {
       this.state.respawn = Math.max(0, this.state.respawn - dt);
       if (this.state.respawn <= 0) {
         this.state.hp = H.maxHp;
+        this.state.harvests = 0;
         if (this.active) {
           this.respawnText?.destroy();
           this.respawnText = undefined;
@@ -174,6 +190,7 @@ export class HelicoprionBoss {
         this.scene.tweens.add({ targets: bomb, alpha: 1, duration: 400 });
       }
     }
+    if (this.active && helicoprionStatus(this.state) === 'dead') this.host.setHarvestButton(this.nearCorpse());
     if (!this.fighting || !this.container) return;
     this.flickerFuses();
     this.phaseTimer -= dt;
@@ -402,21 +419,87 @@ export class HelicoprionBoss {
   }
 
   private defeat() {
-    this.state.respawn = H.respawnSeconds;
+    // 수룡처럼 몸 전체가 회색 사체로 남고, 다섯 번 갈무리하면 5분 뒤 부활합니다.
+    this.state.hp = 0;
+    this.state.respawn = 0;
+    this.state.harvests = 0;
     this.charge = this.jawTarget = undefined;
     this.clearDanger();
     this.audio.setBossMusic(null);
     this.audio.playBossVictory();
-    const container = this.container;
-    if (container) {
-      this.scene.tweens.killTweensOf(container);
-      this.scene.tweens.add({
-        targets: container, alpha: 0, y: container.y + 60, angle: container.angle + 25, duration: 900,
-        onComplete: () => { if (this.container === container) this.destroyBossSprite(); },
-      });
+    this.host.showNotice(`🦈 헬리코프리온 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 ${H.harvestCount}회)`);
+    this.showCorpse();
+  }
+
+  /** 갈무리를 시도합니다. 둥지에 사체가 없으면 false를 돌려 다른 갈무리 대상에 넘깁니다. */
+  tryHarvest(): boolean {
+    if (!this.active || helicoprionStatus(this.state) !== 'dead') return false;
+    if (!this.nearCorpse()) {
+      this.audio.playDenied();
+      this.host.showNotice('헬리코프리온의 사체에 더 가까이 가야 갈무리할 수 있어요.');
+      return true;
     }
-    this.host.showNotice('🦈 헬리코프리온 토벌 성공! 5분 뒤 둥지에서 다시 부활합니다.');
-    this.showRespawnTimer();
+    const done = (this.state.harvests ?? 0) + 1;
+    const reward = harvestHelicoprion(this.state);
+    if (!reward) return true;
+    this.host.addLoot(reward);
+    this.audio.playCollect();
+    this.showLoot(reward);
+    if (helicoprionStatus(this.state) === 'respawning') {
+      this.host.setHarvestButton(false);
+      this.host.showNotice(`${reward} 획득! 갈무리 ${done}/${H.harvestCount}\n갈무리를 마쳤습니다. 헬리코프리온은 5분 뒤 둥지에서 부활합니다.`);
+      this.corpseText?.destroy();
+      this.corpseText = undefined;
+      const container = this.container;
+      if (container) {
+        this.scene.tweens.add({
+          targets: container, alpha: 0, duration: 450,
+          onComplete: () => { if (this.container === container) this.destroyBossSprite(); },
+        });
+      }
+      this.showRespawnTimer();
+    } else {
+      this.host.showNotice(`${reward} 획득! 갈무리 ${done}/${H.harvestCount}`);
+      this.layoutCorpseText();
+    }
+    return true;
+  }
+
+  private showCorpse() {
+    if (!this.active) return;
+    if (!this.container) this.createBossSprite();
+    this.scene.tweens.killTweensOf([this.container, this.jaw]);
+    this.heading = Math.cos(this.heading) < 0 ? Math.PI : 0;
+    this.jaw?.setAngle(10);
+    for (const image of [this.bodyImage, this.jaw]) image?.setTintFill(0x7b8794).setAlpha(0.92);
+    this.applyTransform();
+    this.drawBar();
+    if (!this.corpseText) {
+      this.corpseText = this.scene.add.text(0, 0, '', {
+        fontSize: '15px', color: '#e2e8f0', fontStyle: 'bold',
+        backgroundColor: 'rgba(15, 23, 42, 0.78)', padding: { x: 8, y: 5 },
+      }).setOrigin(0.5).setDepth(8);
+    }
+    this.layoutCorpseText();
+  }
+
+  private layoutCorpseText() {
+    if (!this.corpseText) return;
+    this.corpseText.setText(`☠️ 헬리코프리온의 사체 · 갈무리 ${this.state.harvests ?? 0}/${H.harvestCount}`);
+    this.corpseText.setPosition(this.x, this.y - this.displayWidth * 0.26 - 16);
+  }
+
+  private nearCorpse() {
+    const p = this.host.player();
+    return !!this.container && Math.hypot(p.x - this.x, p.y - this.y) <= Math.max(H.harvestRange, this.displayWidth * 0.55);
+  }
+
+  private showLoot(reward: string) {
+    const p = this.host.player();
+    const text = this.scene.add.text(p.x, p.y - 45, `${LOOT_ICONS[reward] ?? '🎁'} ${reward}`, {
+      fontSize: '16px', color: '#ffffff', fontStyle: 'bold', backgroundColor: 'rgba(2, 6, 23, 0.82)', padding: { x: 6, y: 3 },
+    }).setOrigin(0.5).setDepth(45);
+    this.scene.tweens.add({ targets: text, y: text.y - 55, alpha: 0, duration: 1300, ease: 'Cubic.easeOut', onComplete: () => text.destroy() });
   }
 
   private showRespawnTimer() {

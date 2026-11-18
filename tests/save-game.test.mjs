@@ -138,6 +138,10 @@ test('dragon pass opens after the first kill and stays open for older saves', ()
 test('helicoprion nest progress round-trips and rejects broken boss data', () => {
   const data = { ...sample(), zoneIndex: 7, level: 33, progress: { maxLevelExpanded: true, dragonPassUnlocked: true },
     helicoprion: { hp: 1250, respawn: 0, bombs: [0, 12.5, 0, 20] } };
+  const corpse = { ...data, dragonLoot: ['헬리코프리온의 아래턱', '낡은 고대의 편지'],
+    helicoprion: { hp: 0, respawn: 0, harvests: 2, bombs: [0, 0, 0, 0] } };
+  assert.equal(writeSave(corpse), true);
+  assert.deepEqual(readSave().data, corpse);
   assert.equal(writeSave(data), true);
   assert.deepEqual(readSave().data, data);
   for (const helicoprion of [

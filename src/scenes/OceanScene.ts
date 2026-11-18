@@ -457,6 +457,14 @@ export class OceanScene extends Phaser.Scene {
       player: () => ({ x: this.player.x, y: this.player.y }),
       damagePlayer: (amount, attacker) => this.damagePlayer(amount, attacker),
       showNotice: message => this.showNotice(message),
+      setHarvestButton: visible => {
+        this.harvestBtnBg.setVisible(visible);
+        this.harvestBtnText.setVisible(visible);
+      },
+      addLoot: item => {
+        this.dragonLoot.push(item);
+        this.updateHud();
+      },
     });
 
     this.pauseControls = new PauseControls({
@@ -790,7 +798,7 @@ export class OceanScene extends Phaser.Scene {
       ) {
         this.harvestBtnBg.setScale(0.94);
         this.time.delayedCall(120, () => this.harvestBtnBg.setScale(1));
-        this.tryHarvestDragon();
+        this.tryHarvest();
         return;
       }
 
@@ -1608,6 +1616,11 @@ export class OceanScene extends Phaser.Scene {
     this.dragonDangerText?.setVisible(false);
   }
 
+  private tryHarvest() {
+    if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.tryHarvest();
+    else this.tryHarvestDragon();
+  }
+
   private tryHarvestDragon() {
     if (this.zoneIndex !== DRAGON_ZONE_INDEX || this.dragonState !== 'dead' || this.dragonHarvests >= 3 || !this.dragonSprite) return;
     const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.dragonSprite.x, this.dragonSprite.y);
@@ -2360,10 +2373,11 @@ export class OceanScene extends Phaser.Scene {
       ? `🌊 ${zone.name}(${depth}m)\n⭐ Lv.${this.level}/${this.maxLevel}\n❤️ ${this.playerHp}/${this.maxHp}`
       : `🌊 ${zone.name}(${depth}m) | ⭐ Lv.${this.level}/${this.maxLevel} | ❤️ ${this.playerHp}/${this.maxHp}`);
     this.submarinePanel?.update(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot));
-    const scaleCount = this.dragonLoot.filter((loot) => loot === '수룡의 비늘').length;
-    const skullCount = this.dragonLoot.filter((loot) => loot === '수룡의 머리뼈').length;
-    const lootSummary =
-      this.dragonLoot.length > 0 ? ` | 전리품: 비늘×${scaleCount} 머리뼈×${skullCount}` : '';
+    const lootCounts = new Map<string, number>();
+    for (const loot of this.dragonLoot) lootCounts.set(loot, (lootCounts.get(loot) ?? 0) + 1);
+    const lootSummary = lootCounts.size > 0
+      ? ` | 전리품: ${[...lootCounts].map(([name, count]) => `${name.replace('헬리코프리온의 ', '헬리 ').replace('수룡의 ', '수룡 ')}×${count}`).join(' ')}`
+      : '';
     const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역'
       : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
@@ -2510,7 +2524,7 @@ export class OceanScene extends Phaser.Scene {
       this.emptyBagToTank();
     }
     if (this.keyG && Phaser.Input.Keyboard.JustDown(this.keyG)) {
-      this.tryHarvestDragon();
+      this.tryHarvest();
     }
     if (this.keyE && Phaser.Input.Keyboard.JustDown(this.keyE)) {
       this.tryMineNearbyOre();
