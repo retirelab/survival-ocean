@@ -33,6 +33,10 @@ interface FishSpec {
   aggressive?: boolean;
   attack?: number;
   unique?: boolean;
+  /** 가까이 가도 먼저 덤비지 않고, 총알에 맞았을 때만 공격합니다. */
+  provokedOnly?: boolean;
+  /** 원본 그림이 왼쪽을 보고 있음 */
+  facesLeft?: boolean;
 }
 
 interface FishEntity {
@@ -126,6 +130,23 @@ const DEEP_FISH: FishSpec[] = [
   { key: 'flounder', name: '광어', hp: 10, speed: 80, exp: 100, scale: 0.62, aggressive: true, attack: 5 },
   { key: 'tuna', name: '참다랑어', hp: 3, speed: 115, exp: 60, scale: 0.62 },
 ];
+
+// 빙하수 골짜기. 그림은 2배 크기로 저장해 scale 0.5 근처로 표시합니다.
+const GLACIAL_FISH: FishSpec[] = [
+  { key: 'glacial_mako', name: '청상아리', hp: 120, speed: 150, exp: 700, scale: 0.5, aggressive: true, provokedOnly: true, attack: 25, unique: true },
+  { key: 'glacial_marlin', name: '청세치', hp: 40, speed: 155, exp: 260, scale: 0.5, aggressive: true, provokedOnly: true, attack: 15, unique: true },
+  { key: 'glacial_sailfish', name: '돛세치', hp: 40, speed: 160, exp: 260, scale: 0.5, aggressive: true, provokedOnly: true, attack: 15, unique: true },
+  { key: 'glacial_herring', name: '청어', hp: 8, speed: 120, exp: 80, scale: 0.5 },
+  { key: 'glacial_icefish', name: '남극빙어', hp: 10, speed: 90, exp: 90, scale: 0.5, facesLeft: true },
+  { key: 'glacial_mackerel', name: '고등어', hp: 8, speed: 125, exp: 80, scale: 0.5 },
+  { key: 'glacial_shrimp', name: '흰다리새우', hp: 5, speed: 75, exp: 60, scale: 0.5 },
+  { key: 'glacial_squid', name: '오징어', hp: 12, speed: 110, exp: 100, scale: 0.5 },
+];
+const GLACIAL_FISH_FILES: Record<string, string> = {
+  glacial_mako: 'mako', glacial_marlin: 'marlin_blue', glacial_sailfish: 'sailfish_blue', glacial_herring: 'herring',
+  glacial_icefish: 'icefish', glacial_mackerel: 'mackerel_atl', glacial_shrimp: 'shrimp_white', glacial_squid: 'squid_red',
+};
+const GLACIAL_ZONE_INDEX = 4;
 
 const DRAGON_ZONE_INDEX = 3;
 /** 위아래로 이어진 마지막 구역(열수분출공층). 그 뒤 구역은 옆으로 들어갑니다. */
@@ -318,6 +339,7 @@ export class OceanScene extends Phaser.Scene {
     this.load.image('water_dragon_skull', `${assetBase}/water-dragon-skull.png`);
     this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
     HelicoprionBoss.preload(this);
+    for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
   }
 
   create() {
@@ -2078,6 +2100,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === 0) return SHALLOW_FISH;
     if (this.zoneIndex === 1) return MID_FISH;
     if (this.zoneIndex === 2) return DEEP_FISH;
+    if (this.zoneIndex === GLACIAL_ZONE_INDEX) return GLACIAL_FISH;
     return [];
   }
 
@@ -2153,7 +2176,7 @@ export class OceanScene extends Phaser.Scene {
 
   private setFishFacing(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse, spec: FishSpec, movingRight: boolean) {
     if (!('setFlipX' in sprite)) return;
-    const artworkFacesLeft = spec.key === 'red_seabream' || spec.key === 'rock_bream';
+    const artworkFacesLeft = spec.facesLeft || spec.key === 'red_seabream' || spec.key === 'rock_bream';
     sprite.setFlipX(artworkFacesLeft ? movingRight : !movingRight);
   }
 
@@ -2671,7 +2694,7 @@ export class OceanScene extends Phaser.Scene {
           this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name, true);
         }
       } else {
-        if (this.zoneIndex >= 2 && fish.spec.aggressive) {
+        if (this.zoneIndex >= 2 && fish.spec.aggressive && !fish.spec.provokedOnly) {
           const distToPlayer = Phaser.Math.Distance.Between(this.player.x, this.player.y, fish.sprite.x, fish.sprite.y);
           if (distToPlayer < 115) {
             fish.aggro = true;
