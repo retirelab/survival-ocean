@@ -122,12 +122,15 @@ test('post-dragon depths and expanded levels can be saved and loaded', () => {
   assert.equal(writeSave(pending), true);
 });
 
-test('legacy saves without progress flags derive them from the dragon state', () => {
-  assert.deepEqual(resolveProgress(sample()), { maxLevelExpanded: false, dragonPassUnlocked: false });
-  const harvested = sample(); harvested.dragon = { state: 'respawning', hp: 0, harvests: 3, respawn: 120, cooldown: 0 };
-  assert.deepEqual(resolveProgress(harvested), { maxLevelExpanded: false, dragonPassUnlocked: true });
-  const deep = { ...sample(), zoneIndex: 4 };
-  assert.deepEqual(resolveProgress(deep), { maxLevelExpanded: true, dragonPassUnlocked: true });
-  const explicit = { ...harvested, progress: { maxLevelExpanded: false, dragonPassUnlocked: false } };
-  assert.equal(resolveProgress(explicit).dragonPassUnlocked, false);
+test('dragon pass opens after the first kill and stays open for older saves', () => {
+  const fresh = () => ({ ...sample(), dragonLoot: [], dragon: { state: 'sleeping', hp: 1250, harvests: 0, respawn: 0, cooldown: 5 } });
+  assert.deepEqual(resolveProgress(fresh()), { maxLevelExpanded: false, dragonPassUnlocked: false });
+  // 막 쓰러뜨려 아직 갈무리하지 않은 상태
+  const justKilled = fresh(); justKilled.dragon = { state: 'dead', hp: 0, harvests: 0, respawn: 0, cooldown: 0 };
+  assert.equal(resolveProgress(justKilled).dragonPassUnlocked, true);
+  // 부활해서 다시 잠든 상태라도 전리품이나 아기 드래곤 잠수함이 있으면 이미 잡은 것입니다.
+  assert.equal(resolveProgress({ ...fresh(), dragonLoot: ['수룡의 비늘'] }).dragonPassUnlocked, true);
+  assert.equal(resolveProgress({ ...fresh(), submarines: { owned: ['basic', 'baby_dragon'], equipped: 'basic' } }).dragonPassUnlocked, true);
+  assert.equal(resolveProgress({ ...fresh(), progress: { maxLevelExpanded: false, dragonPassUnlocked: true } }).dragonPassUnlocked, true);
+  assert.deepEqual(resolveProgress({ ...fresh(), zoneIndex: 4 }), { maxLevelExpanded: true, dragonPassUnlocked: true });
 });

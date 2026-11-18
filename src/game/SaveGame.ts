@@ -11,7 +11,7 @@ const MAX_UPGRADE_STAGE = 3;
 export interface SaveProgress {
   /** 빙하수 골짜기 진입으로 최대 레벨이 40으로 확장되었는지 */
   maxLevelExpanded: boolean;
-  /** 수룡 갈무리 3회로 아래 통로가 열렸는지 */
+  /** 수룡을 한 번이라도 토벌해 아래 통로가 영구히 열렸는지 */
   dragonPassUnlocked: boolean;
 }
 
@@ -76,13 +76,16 @@ export function isSaveGame(value: unknown): value is SaveGame {
 /**
  * 저장에 기록된 진행 플래그를 돌려줍니다. progress가 없는 예전 저장은 남은 정보로 추정합니다.
  * 빙하수 골짜기(4번) 이하로 내려간 적이 있으면 두 플래그 모두 켜진 상태입니다.
+ * 통로는 한 번 열리면 닫히지 않으므로, 수룡을 잡은 흔적이 하나라도 있으면 열린 것으로 봅니다.
  */
 export function resolveProgress(save: SaveGame): SaveProgress {
   const deep = save.zoneIndex >= 4;
-  const harvested = save.dragon.state === 'respawning' || save.dragon.harvests >= 3;
+  const killedDragon = save.dragon.state === 'dead' || save.dragon.state === 'respawning' ||
+    save.dragon.harvests > 0 || save.dragonLoot.some(item => item.startsWith('수룡')) ||
+    (save.submarines?.owned.includes('baby_dragon') ?? false);
   return {
     maxLevelExpanded: deep || save.level > BASE_MAX_LEVEL || (save.progress?.maxLevelExpanded ?? false),
-    dragonPassUnlocked: deep || (save.progress?.dragonPassUnlocked ?? harvested),
+    dragonPassUnlocked: deep || killedDragon || (save.progress?.dragonPassUnlocked ?? false),
   };
 }
 

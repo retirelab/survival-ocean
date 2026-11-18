@@ -1397,7 +1397,12 @@ export class OceanScene extends Phaser.Scene {
     this.clearDragonDanger();
     this.audio.playBossVictory();
     this.applyDragonAppearance();
-    this.showNotice('수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)');
+    const firstKill = !this.dragonPassUnlocked;
+    // 첫 토벌부터 아래 통로가 영구히 열립니다. 갈무리는 전리품용으로만 남습니다.
+    this.dragonPassUnlocked = true;
+    this.showNotice(firstKill
+      ? '수룡 토벌 성공! 🔓 이제 언제든 빙하수 골짜기로 내려갈 수 있습니다.\n회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)'
+      : '수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 3회)');
   }
 
   private startDragonAttack() {
@@ -1599,8 +1604,7 @@ export class OceanScene extends Phaser.Scene {
     this.showDragonLoot(reward);
     this.applyDragonAppearance();
     if (this.dragonHarvests >= 3) {
-      this.dragonPassUnlocked = true;
-      this.showNotice(`${reward} 획득! 갈무리 3/3\n🔓 아래쪽 빙하수 골짜기로 향하는 통로가 열렸습니다!`);
+      this.showNotice(`${reward} 획득! 갈무리 3/3`);
       this.time.delayedCall(450, () => this.beginDragonRespawn());
     } else {
       this.showNotice(`${reward} 획득! 갈무리 ${this.dragonHarvests}/3`);
@@ -1633,7 +1637,7 @@ export class OceanScene extends Phaser.Scene {
     this.harvestBtnBg.setVisible(false);
     this.harvestBtnText.setVisible(false);
     this.ensureDragonVisual();
-    this.showNotice('갈무리를 마쳤습니다. 아래 통로가 열렸습니다!\n수룡은 5분 뒤 이 자리에서 부활합니다.');
+    this.showNotice('갈무리를 마쳤습니다. 수룡은 5분 뒤 이 자리에서 부활합니다.');
   }
 
   private updateDragon(dt: number) {
@@ -2489,7 +2493,7 @@ export class OceanScene extends Phaser.Scene {
       if (this.zoneIndex === DRAGON_ZONE_INDEX && !this.dragonPassUnlocked) {
         this.player.y = height - 26;
         this.audio.playDenied();
-        this.showNotice('수룡을 토벌하고 사체를 세 번 모두 갈무리해야 아래 통로가 열립니다!');
+        this.showNotice('수룡을 한 번 토벌하면 아래 통로가 열립니다!');
         return;
       }
       const nextZone = ZONES[this.zoneIndex + 1];
