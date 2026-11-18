@@ -148,8 +148,10 @@ const GLACIAL_FISH_FILES: Record<string, string> = {
 };
 const GLACIAL_ZONE_INDEX = 4;
 
+const UNDERWORLD_2F_LARGE_PREDATOR_HP = 150;
 const UNDERWORLD_2F_FISH: FishSpec[] = [
-  { key: 'underworld_great_white', name: '백상아리', hp: 150, speed: 150, exp: 800, scale: 0.5, aggressive: true, provokedOnly: true, attack: 30, unique: true },
+  { key: 'underworld_great_white', name: '백상아리', hp: UNDERWORLD_2F_LARGE_PREDATOR_HP, speed: 150, exp: 800, scale: 0.5, aggressive: true, provokedOnly: true, attack: 30, unique: true },
+  { key: 'underworld_crocodile', name: '바다악어', hp: UNDERWORLD_2F_LARGE_PREDATOR_HP, speed: 105, exp: 800, scale: 0.5, aggressive: true, provokedOnly: true, attack: 30, unique: true },
   { key: 'underworld_horse_mackerel', name: '전갱이', hp: 10, speed: 125, exp: 90, scale: 0.5 },
   { key: 'underworld_octopus', name: '문어', hp: 16, speed: 85, exp: 120, scale: 0.5 },
   { key: 'underworld_squid', name: '오징어', hp: 14, speed: 115, exp: 110, scale: 0.5 },
