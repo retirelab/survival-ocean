@@ -33,7 +33,7 @@ interface FishSpec {
   aggressive?: boolean;
   attack?: number;
   unique?: boolean;
-  /** 가까이 가도 먼저 덤비지 않고, 총알에 맞았을 때만 공격합니다. */
+  /** 가까이 가도 먼저 덤비지 않고, 피해를 입었을 때 반격합니다. */
   provokedOnly?: boolean;
   /** 원본 그림이 왼쪽을 보고 있음 */
   facesLeft?: boolean;
@@ -148,10 +148,21 @@ const GLACIAL_FISH_FILES: Record<string, string> = {
 };
 const GLACIAL_ZONE_INDEX = 4;
 
+const UNDERWORLD_2F_FISH: FishSpec[] = [
+  { key: 'underworld_great_white', name: '백상아리', hp: 150, speed: 150, exp: 800, scale: 0.5, aggressive: true, provokedOnly: true, attack: 30, unique: true },
+  { key: 'underworld_horse_mackerel', name: '전갱이', hp: 10, speed: 125, exp: 90, scale: 0.5 },
+  { key: 'underworld_octopus', name: '문어', hp: 16, speed: 85, exp: 120, scale: 0.5 },
+  { key: 'underworld_squid', name: '오징어', hp: 14, speed: 115, exp: 110, scale: 0.5 },
+  { key: 'underworld_lobster', name: '랍스타', hp: 45, speed: 100, exp: 280, scale: 0.5, aggressive: true, provokedOnly: true, attack: 16, unique: true },
+  { key: 'underworld_king_crab', name: '킹크랩', hp: 22, speed: 75, exp: 160, scale: 0.5 },
+  { key: 'underworld_conger', name: '붕장어', hp: 15, speed: 120, exp: 115, scale: 0.5 },
+  { key: 'underworld_grouper', name: '다금바리', hp: 55, speed: 115, exp: 340, scale: 0.5, aggressive: true, provokedOnly: true, attack: 20, unique: true },
+];
+
 const DRAGON_ZONE_INDEX = 3;
 /** 위아래로 이어진 마지막 구역(열수분출공층). 그 뒤 구역은 옆으로 들어갑니다. */
 const LAST_DEPTH_ZONE_INDEX = 6;
-const NEST_GATE_ZONE_INDEX = 5;
+const UNDERWORLD_2F_ZONE_INDEX = 5;
 const NEST_ZONE_INDEX = 7;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_ATTACK_DAMAGE = 50;
@@ -340,6 +351,7 @@ export class OceanScene extends Phaser.Scene {
     this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
     HelicoprionBoss.preload(this);
     for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
+    for (const { key } of UNDERWORLD_2F_FISH) this.load.image(key, `assets/fish/${key}.png`);
   }
 
   create() {
@@ -2101,6 +2113,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === 1) return MID_FISH;
     if (this.zoneIndex === 2) return DEEP_FISH;
     if (this.zoneIndex === GLACIAL_ZONE_INDEX) return GLACIAL_FISH;
+    if (this.zoneIndex === UNDERWORLD_2F_ZONE_INDEX) return UNDERWORLD_2F_FISH;
     return [];
   }
 
@@ -2558,7 +2571,7 @@ export class OceanScene extends Phaser.Scene {
       if (!muted) this.audio.playCollect();
     }
 
-    if (this.zoneIndex === NEST_GATE_ZONE_INDEX && this.player.x >= width - 26) {
+    if (this.zoneIndex === UNDERWORLD_2F_ZONE_INDEX && this.player.x >= width - 26) {
       this.changeZone(NEST_ZONE_INDEX, height * NEST_ENTRANCE.height * 0.6);
       this.player.x = width * NEST_ENTRANCE.width + 40;
       return;
@@ -2566,7 +2579,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === NEST_ZONE_INDEX && (
       (this.player.x <= 26 && this.player.y <= height * NEST_ENTRANCE.height) ||
       (this.player.y <= 26 && this.player.x <= width * NEST_ENTRANCE.width))) {
-      this.changeZone(NEST_GATE_ZONE_INDEX, height * 0.52);
+      this.changeZone(UNDERWORLD_2F_ZONE_INDEX, height * 0.52);
       this.player.x = width - 70;
       return;
     }
