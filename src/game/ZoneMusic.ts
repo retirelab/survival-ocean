@@ -1,8 +1,12 @@
+/** 구역 번호 순서대로 재생할 곡. 구역을 추가하면 여기에도 한 줄 추가합니다. */
 export const ZONE_TRACKS = [
-  'morning_at_the_reef.mp3',
-  'the_weight_of_water.mp3',
-  'pressure_at_twelve_fathoms.mp3',
-  'pressure_and_salt.mp3',
+  'morning_at_the_reef.mp3', // 0 초심층
+  'the_weight_of_water.mp3', // 1 중심층
+  'pressure_at_twelve_fathoms.mp3', // 2 심해
+  'pressure_and_salt.mp3', // 3 지하세계·수룡 보스전
+  'light_through_the_fissure.mp3', // 4 빙하수 골짜기
+  'current_and_stone.mp3', // 5 지하세계 2층
+  'pressure_and_salt.mp3', // 6 열수분출공층 (전용 곡 전까지 지하세계 곡)
 ] as const;
 
 /** Stream one looping track; pause preserves its position without decoding every MP3. */
@@ -30,9 +34,12 @@ export class ZoneMusic {
   setMuted(muted: boolean) { this.audio.volume = muted ? 0 : 0.32; }
 
   setZone(zone: number) {
-    const next = Math.max(0, Math.min(3, Math.round(zone)));
+    const next = Math.max(0, Math.min(ZONE_TRACKS.length - 1, Math.round(zone)));
     if (next === this.zone || this.destroyed) return;
+    const sameTrack = ZONE_TRACKS[next] === ZONE_TRACKS[this.zone];
     this.zone = next;
+    // 같은 곡을 쓰는 구역끼리 이동하면 끊지 않고 이어서 재생합니다.
+    if (sameTrack) return;
     this.audio.pause();
     this.revision++;
     this.playPending = false;

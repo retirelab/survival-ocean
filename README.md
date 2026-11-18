@@ -9,8 +9,11 @@
 | 중심층 | the_weight_of_water.mp3 |
 | 심해 | pressure_at_twelve_fathoms.mp3 |
 | 지하세계·수룡 보스전 | pressure_and_salt.mp3 |
+| 빙하수 골짜기 | light_through_the_fissure.mp3 |
+| 지하세계 2층 | current_and_stone.mp3 |
+| 열수분출공층 | pressure_and_salt.mp3 (전용 곡 추가 전까지) |
 
-- 첫 키 입력이나 터치 후 재생하며 구역을 바꾸면 새 구역의 음악을 처음부터 재생합니다.
+- 첫 키 입력이나 터치 후 재생하며 구역을 바꾸면 새 구역의 음악을 처음부터 재생합니다. 같은 곡을 쓰는 구역끼리는 끊지 않고 이어 재생합니다.
 - 일시정지·상점·앱 전환 시 음악도 멈추고, 계속하기를 누르면 멈춘 지점부터 이어집니다.
 - 기존 음소거(M) 설정을 함께 적용합니다. 수룡 전투 시작·종료 때도 지하세계 BGM을 끊지 않고 이어 재생합니다.
 - 파일은 `public/assets/audio/`에 보관하며 GitHub Pages 배포에 포함됩니다.

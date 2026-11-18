@@ -23,13 +23,14 @@ globalThis.Audio = class {
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-test('corrected assignment maps to all four zone tracks under the Pages base path', async () => {
+test('every zone maps to its track under the Pages base path', async () => {
   const music = new ZoneMusic('/survival-ocean/');
   assert.equal(media.plays, 0);
   assert.equal(media.loop, true);
-  assert.deepEqual(ZONE_TRACKS, ['morning_at_the_reef.mp3', 'the_weight_of_water.mp3', 'pressure_at_twelve_fathoms.mp3', 'pressure_and_salt.mp3']);
+  assert.deepEqual(ZONE_TRACKS, ['morning_at_the_reef.mp3', 'the_weight_of_water.mp3', 'pressure_at_twelve_fathoms.mp3',
+    'pressure_and_salt.mp3', 'light_through_the_fissure.mp3', 'current_and_stone.mp3', 'pressure_and_salt.mp3']);
   music.unlock();
-  for (let zone = 0; zone < 4; zone++) {
+  for (let zone = 0; zone < ZONE_TRACKS.length; zone++) {
     music.setZone(zone);
     assert.equal(media.src, `/survival-ocean/assets/audio/${ZONE_TRACKS[zone]}`);
     assert.equal(media.paused, false);
@@ -82,5 +83,26 @@ test('autoplay rejection can be retried on a later gesture without overlapping p
   await settle();
   assert.equal(media.plays, 2);
   assert.equal(media.paused, false);
+  music.destroy();
+});
+
+test('every listed track ships in public/assets/audio', async () => {
+  const { existsSync } = await import('node:fs');
+  for (const track of ZONE_TRACKS) assert.ok(existsSync(new URL(`../public/assets/audio/${track}`, import.meta.url)), track);
+});
+
+test('zones sharing a track keep playing without restarting', async () => {
+  const music = new ZoneMusic('/survival-ocean/');
+  music.unlock();
+  music.setZone(3);
+  await settle();
+  media.currentTime = 42;
+  const plays = media.plays;
+  music.setZone(6);
+  assert.equal(media.currentTime, 42);
+  assert.equal(media.plays, plays);
+  assert.equal(media.paused, false);
+  music.setZone(5);
+  assert.equal(media.src, '/survival-ocean/assets/audio/current_and_stone.mp3');
   music.destroy();
 });

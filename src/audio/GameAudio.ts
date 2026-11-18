@@ -52,8 +52,9 @@ export class GameAudio {
   }
 
   setZone(zoneIndex: number) {
+    // 배경음은 모든 구역에 곡이 있고, 효과음 분위기는 기존 4단계(0~3)까지만 있습니다.
+    this.zoneMusic.setZone(zoneIndex);
     this.zoneIndex = Math.max(0, Math.min(3, Math.round(zoneIndex)));
-    this.zoneMusic.setZone(this.zoneIndex);
     this.applyZoneAtmosphere();
   }
 
