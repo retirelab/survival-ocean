@@ -58,6 +58,30 @@ export class GameAudio {
     this.applyZoneAtmosphere();
   }
 
+  /** 보스전 BGM을 켜거나 끕니다. null이면 현재 구역 곡으로 돌아갑니다. */
+  setBossMusic(track: string | null) {
+    this.zoneMusic.setOverride(track);
+  }
+
+  playExplosion() {
+    if (!this.canPlay('explosion', 0.25)) return;
+    this.noiseBurst(0.6, 0.22, 420);
+    this.tone(90, 0.55, 'sawtooth', 0.16, 34);
+    this.tone(160, 0.3, 'square', 0.08, 60, 0.04);
+  }
+
+  playCharge() {
+    if (!this.canPlay('charge', 0.4)) return;
+    this.tone(70, 0.5, 'sawtooth', 0.1, 220);
+    this.noiseBurst(0.35, 0.06, 1400);
+  }
+
+  playSaw() {
+    if (!this.canPlay('saw', 0.3)) return;
+    this.tone(240, 0.22, 'sawtooth', 0.08, 520);
+    this.tone(520, 0.18, 'square', 0.05, 260, 0.1);
+  }
+
   toggleMute(): boolean {
     this.unlock();
     this.muted = !this.muted;

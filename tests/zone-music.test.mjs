@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ZoneMusic, ZONE_TRACKS } from '../.test-build/ZoneMusic.js';
+import { ZoneMusic, ZONE_TRACKS, BOSS_TRACKS } from '../.test-build/ZoneMusic.js';
 
 let media;
 globalThis.Audio = class {
@@ -28,7 +28,8 @@ test('every zone maps to its track under the Pages base path', async () => {
   assert.equal(media.plays, 0);
   assert.equal(media.loop, true);
   assert.deepEqual(ZONE_TRACKS, ['morning_at_the_reef.mp3', 'the_weight_of_water.mp3', 'pressure_at_twelve_fathoms.mp3',
-    'pressure_and_salt.mp3', 'light_through_the_fissure.mp3', 'current_and_stone.mp3', 'pressure_and_salt.mp3']);
+    'pressure_and_salt.mp3', 'light_through_the_fissure.mp3', 'current_and_stone.mp3', 'pressure_and_salt.mp3',
+    'current_and_stone.mp3']);
   music.unlock();
   for (let zone = 0; zone < ZONE_TRACKS.length; zone++) {
     music.setZone(zone);
@@ -88,7 +89,7 @@ test('autoplay rejection can be retried on a later gesture without overlapping p
 
 test('every listed track ships in public/assets/audio', async () => {
   const { existsSync } = await import('node:fs');
-  for (const track of ZONE_TRACKS) assert.ok(existsSync(new URL(`../public/assets/audio/${track}`, import.meta.url)), track);
+  for (const track of [...ZONE_TRACKS, ...Object.values(BOSS_TRACKS)]) assert.ok(existsSync(new URL(`../public/assets/audio/${track}`, import.meta.url)), track);
 });
 
 test('zones sharing a track keep playing without restarting', async () => {
@@ -103,6 +104,30 @@ test('zones sharing a track keep playing without restarting', async () => {
   assert.equal(media.plays, plays);
   assert.equal(media.paused, false);
   music.setZone(5);
+  assert.equal(media.src, '/survival-ocean/assets/audio/current_and_stone.mp3');
+  music.destroy();
+});
+
+test('boss music starts from the beginning and the zone track returns afterwards', async () => {
+  const music = new ZoneMusic('/survival-ocean/');
+  music.unlock();
+  music.setZone(5);
+  await settle();
+  // 지하세계 2층 → 둥지는 같은 곡이라 이어지고, 보스전이 시작되면 보스 곡으로 바뀝니다.
+  music.setZone(7);
+  assert.equal(media.src, '/survival-ocean/assets/audio/current_and_stone.mp3');
+  music.setOverride(BOSS_TRACKS.helicoprion);
+  assert.equal(media.src, '/survival-ocean/assets/audio/serrated_mandibles.mp3');
+  assert.equal(media.currentTime, 0);
+  assert.equal(media.paused, false);
+  await settle();
+  // 보스전 중 일시정지해도 보스 곡을 유지합니다.
+  music.setPaused(true);
+  assert.equal(media.paused, true);
+  music.setPaused(false);
+  assert.equal(media.src, '/survival-ocean/assets/audio/serrated_mandibles.mp3');
+  await settle();
+  music.setOverride(null);
   assert.equal(media.src, '/survival-ocean/assets/audio/current_and_stone.mp3');
   music.destroy();
 });

@@ -5,6 +5,8 @@ import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementS
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, inventoryResources, submarineImage } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
+import { HelicoprionBoss } from './HelicoprionBoss';
+import { NEST_ENTRANCE } from '../game/Helicoprion';
 import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, type SaveGame } from '../game/SaveGame';
 
 const ROCK_BREAM_SPRITE =
@@ -89,6 +91,8 @@ const ZONES: ZoneConfig[] = [
   { id: 4, name: '빙하수 골짜기', minDepth: 400, maxDepth: 500, reqLevel: 18, topColor: 0x075985, bottomColor: 0x0c4a6e, floorColor: 0x67e8f9 },
   { id: 5, name: '지하세계 2층', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x172554, bottomColor: 0x111827, floorColor: 0x9a3412 },
   { id: 6, name: '열수분출공층', minDepth: 600, maxDepth: 700, reqLevel: 18, topColor: 0x0f172a, bottomColor: 0x030712, floorColor: 0x292524 },
+  // 지하세계 2층 오른쪽 끝과 이어진 옆 구역. 위아래로는 이동하지 않습니다.
+  { id: 7, name: '헬리코프리온의 둥지', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x1c1917, bottomColor: 0x431407, floorColor: 0xf59e0b },
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
@@ -124,6 +128,10 @@ const DEEP_FISH: FishSpec[] = [
 ];
 
 const DRAGON_ZONE_INDEX = 3;
+/** 위아래로 이어진 마지막 구역(열수분출공층). 그 뒤 구역은 옆으로 들어갑니다. */
+const LAST_DEPTH_ZONE_INDEX = 6;
+const NEST_GATE_ZONE_INDEX = 5;
+const NEST_ZONE_INDEX = 7;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_ATTACK_DAMAGE = 50;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
@@ -262,6 +270,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonBossText!: Phaser.GameObjects.Text;
   private dragonLoot: string[] = [];
   private dragonPassUnlocked = false;
+  private helicoprion!: HelicoprionBoss;
 
   private menuMode: MenuMode = null;
   private menuStage = 0;
@@ -308,6 +317,7 @@ export class OceanScene extends Phaser.Scene {
     this.load.image('water_dragon_boss', `${assetBase}/water-dragon-boss.png`);
     this.load.image('water_dragon_skull', `${assetBase}/water-dragon-skull.png`);
     this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
+    HelicoprionBoss.preload(this);
   }
 
   create() {
@@ -443,6 +453,12 @@ export class OceanScene extends Phaser.Scene {
       .setDepth(32)
       .setVisible(false);
 
+    this.helicoprion = new HelicoprionBoss(this, this.audio, {
+      player: () => ({ x: this.player.x, y: this.player.y }),
+      damagePlayer: (amount, attacker) => this.damagePlayer(amount, attacker),
+      showNotice: message => this.showNotice(message),
+    });
+
     this.pauseControls = new PauseControls({
       pause: () => {
         this.resetHeldInput();
@@ -561,6 +577,7 @@ export class OceanScene extends Phaser.Scene {
       },
       dragon: { state: this.dragonState, hp: this.dragonHp, harvests: this.dragonHarvests,
         respawn: this.dragonRespawnRemaining, cooldown: this.dragonAttackCooldown },
+      helicoprion: this.helicoprion.snapshot(),
       ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
       menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
         nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
@@ -610,6 +627,9 @@ export class OceanScene extends Phaser.Scene {
     }
     this.oreNodes = save.ores.map(ore => ({ id: ore.id as OreNode['id'], x: 0, y: 0,
       remaining: ore.remaining, respawnRemaining: ore.respawn }));
+    // 둥지에서 이어하면 보스전이 다시 시작되며 첫 공격 전 대기시간을 줍니다.
+    this.helicoprion.leave();
+    this.helicoprion.load(save.helicoprion);
     const { width, height } = this.scale;
     this.changeZone(save.zoneIndex, Phaser.Math.Clamp(save.player.y * height, 28, height - 28), false);
     this.player.x = Phaser.Math.Clamp(save.player.x * width, 24, width - 24);
@@ -1235,6 +1255,7 @@ export class OceanScene extends Phaser.Scene {
     this.mineralText.setX(14);
     this.updateHud();
     this.layoutDragon();
+    this.helicoprion?.layout(width, height);
     this.updateMiningInteraction();
     if (this.menuMode) this.rebuildMenu();
   }
@@ -1785,8 +1806,10 @@ export class OceanScene extends Phaser.Scene {
       this.drawGlacialValley(width, height);
     } else if (this.zoneIndex === 5) {
       this.drawUnderworldSecondFloor(width, height);
-    } else {
+    } else if (this.zoneIndex === 6) {
       this.drawHydrothermalVents(width, height);
+    } else if (this.zoneIndex === NEST_ZONE_INDEX) {
+      HelicoprionBoss.drawNest(this.decoGraphics, width, height);
     }
   }
 
@@ -1832,6 +1855,11 @@ export class OceanScene extends Phaser.Scene {
       const by = height * (0.18 + ((index * 13) % 64) / 100);
       g.fillCircle(bx, by, 3 + (index % 4));
     }
+    // 오른쪽 끝: 헬리코프리온의 둥지로 가는 노란 빛 통로
+    g.fillStyle(0xfacc15, 0.22);
+    g.fillTriangle(width, height * 0.4, width - 70, height * 0.52, width, height * 0.64);
+    g.fillStyle(0xfde047, 0.6);
+    g.fillRect(width - 10, height * 0.42, 10, height * 0.2);
   }
 
   private drawHydrothermalVents(width: number, height: number) {
@@ -2214,6 +2242,7 @@ export class OceanScene extends Phaser.Scene {
         this.damageDragon(this.bulletDamage * this.attackMultiplier * 2, true, hitboxes.head.x, hitboxes.head.y);
       else if (segmentHitsRect(ax, ay, bx, by, hitboxes.body)) this.damageDragon(this.bulletDamage * this.attackMultiplier);
     }
+    if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.hitSegment(ax, ay, bx, by, COMBAT.breathRadius, this.bulletDamage * this.attackMultiplier);
   }
 
   private tryCollectNearbyFish() {
@@ -2287,6 +2316,7 @@ export class OceanScene extends Phaser.Scene {
   private changeZone(nextIndex: number, spawnY: number, playSound = true) {
     const previousZoneIndex = this.zoneIndex;
     if (previousZoneIndex === DRAGON_ZONE_INDEX) this.setDragonZoneVisibility(false);
+    if (previousZoneIndex === NEST_ZONE_INDEX) this.helicoprion.leave();
     for (const f of this.fishList) {
       f.sprite.destroy();
       f.label.destroy();
@@ -2316,6 +2346,7 @@ export class OceanScene extends Phaser.Scene {
         expandedNow ? '\n⭐ 최대 레벨이 Lv.40으로 확장되었습니다!' : ''
       }`
     );
+    if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.enter();
     this.updateHud();
   }
 
@@ -2333,7 +2364,8 @@ export class OceanScene extends Phaser.Scene {
     const skullCount = this.dragonLoot.filter((loot) => loot === '수룡의 머리뼈').length;
     const lootSummary =
       this.dragonLoot.length > 0 ? ` | 전리품: 비늘×${scaleCount} 머리뼈×${skullCount}` : '';
-    const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
+    const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역'
+      : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
     this.updateShockButton();
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
@@ -2489,7 +2521,20 @@ export class OceanScene extends Phaser.Scene {
       if (!muted) this.audio.playCollect();
     }
 
-    if (this.player.y >= height - 22 && this.zoneIndex < ZONES.length - 1) {
+    if (this.zoneIndex === NEST_GATE_ZONE_INDEX && this.player.x >= width - 26) {
+      this.changeZone(NEST_ZONE_INDEX, height * NEST_ENTRANCE.height * 0.6);
+      this.player.x = width * NEST_ENTRANCE.width + 40;
+      return;
+    }
+    if (this.zoneIndex === NEST_ZONE_INDEX && (
+      (this.player.x <= 26 && this.player.y <= height * NEST_ENTRANCE.height) ||
+      (this.player.y <= 26 && this.player.x <= width * NEST_ENTRANCE.width))) {
+      this.changeZone(NEST_GATE_ZONE_INDEX, height * 0.52);
+      this.player.x = width - 70;
+      return;
+    }
+
+    if (this.player.y >= height - 22 && this.zoneIndex < LAST_DEPTH_ZONE_INDEX) {
       if (this.zoneIndex === DRAGON_ZONE_INDEX && !this.dragonPassUnlocked) {
         this.player.y = height - 26;
         this.audio.playDenied();
@@ -2507,7 +2552,7 @@ export class OceanScene extends Phaser.Scene {
       }
     }
 
-    if (this.player.y <= 26 && this.zoneIndex > 0) {
+    if (this.player.y <= 26 && this.zoneIndex > 0 && this.zoneIndex !== NEST_ZONE_INDEX) {
       this.changeZone(this.zoneIndex - 1, height - 56);
       return;
     }
@@ -2519,6 +2564,10 @@ export class OceanScene extends Phaser.Scene {
     }
 
     this.updateDragon(dt);
+    const zoneBeforeBoss = this.zoneIndex;
+    this.helicoprion.update(dt);
+    // 보스 공격으로 쓰러지면 초심층으로 이동하므로 이번 프레임은 여기서 끝냅니다.
+    if (this.zoneIndex !== zoneBeforeBoss) return;
     this.updateDragonBreath(dt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
@@ -2547,6 +2596,8 @@ export class OceanScene extends Phaser.Scene {
         segmentHitsRect(previousX, previousY, b.gfx.x, b.gfx.y, dragonHitboxes.body)
       ) {
         this.damageDragon(b.damage);
+        hit = true;
+      } else if (this.zoneIndex === NEST_ZONE_INDEX && this.helicoprion.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 6, b.damage)) {
         hit = true;
       }
       for (const fish of this.fishList) {

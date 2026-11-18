@@ -134,3 +134,17 @@ test('dragon pass opens after the first kill and stays open for older saves', ()
   assert.equal(resolveProgress({ ...fresh(), progress: { maxLevelExpanded: false, dragonPassUnlocked: true } }).dragonPassUnlocked, true);
   assert.deepEqual(resolveProgress({ ...fresh(), zoneIndex: 4 }), { maxLevelExpanded: true, dragonPassUnlocked: true });
 });
+
+test('helicoprion nest progress round-trips and rejects broken boss data', () => {
+  const data = { ...sample(), zoneIndex: 7, level: 33, progress: { maxLevelExpanded: true, dragonPassUnlocked: true },
+    helicoprion: { hp: 1250, respawn: 0, bombs: [0, 12.5, 0, 20] } };
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data, data);
+  for (const helicoprion of [
+    { hp: 2001, respawn: 0, bombs: [0, 0, 0, 0] },
+    { hp: 100, respawn: 301, bombs: [0, 0, 0, 0] },
+    { hp: 100, respawn: 0, bombs: [0, 0, 0] },
+    { hp: 100, respawn: 0, bombs: [0, 0, 0, 21] },
+    null,
+  ]) assert.equal(writeSave({ ...data, helicoprion }), false);
+});

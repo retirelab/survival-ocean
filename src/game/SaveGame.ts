@@ -1,8 +1,9 @@
 import { normalizeFleet, type FleetState } from './Submarines.js';
+import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
-/** 마지막 구역(열수분출공층) 번호. 구역을 추가하면 함께 올려야 합니다. */
-export const MAX_ZONE_INDEX = 6;
+/** 마지막 구역(헬리코프리온의 둥지) 번호. 구역을 추가하면 함께 올려야 합니다. */
+export const MAX_ZONE_INDEX = 7;
 export const BASE_MAX_LEVEL = 20;
 export const EXPANDED_MAX_LEVEL = 40;
 /** 강화 메뉴 단계(기본~GOLD)와 수룡 구역 번호. 강화 단계는 0~3까지만 존재합니다. */
@@ -20,6 +21,7 @@ export interface SaveGame {
   submarines?: FleetState;
   combat?: { armorRemaining: number; shockCooldown: number };
   progress?: SaveProgress;
+  helicoprion?: HelicoprionSave;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -53,6 +55,7 @@ export function isSaveGame(value: unknown): value is SaveGame {
   const progress = value.progress;
   if (progress !== undefined && (!object(progress) || typeof progress.maxLevelExpanded !== 'boolean' ||
       typeof progress.dragonPassUnlocked !== 'boolean')) return false;
+  if (value.helicoprion !== undefined && !isHelicoprionSave(value.helicoprion)) return false;
   const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
   if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;
   if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30))) return false;
