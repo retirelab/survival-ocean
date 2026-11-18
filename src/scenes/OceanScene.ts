@@ -3,7 +3,7 @@ import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
 import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
-import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, inventoryResources, submarineImage } from '../game/Submarines';
+import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
 import { HelicoprionBoss } from './HelicoprionBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
@@ -609,7 +609,7 @@ export class OceanScene extends Phaser.Scene {
     return {
       combat: { armorRemaining: this.armorRemaining, shockCooldown: this.shockCooldown },
       progress: { maxLevelExpanded: this.maxLevelExpanded, dragonPassUnlocked: this.dragonPassUnlocked },
-      submarines: { owned: [...this.fleet.owned], equipped: this.fleet.equipped },
+      submarines: { ...this.fleet, owned: [...this.fleet.owned] },
       version: 1, savedAt: Date.now(), zoneIndex: this.zoneIndex, level: this.level,
       player: { x: this.player.x / width, y: this.player.y / height, facing: this.facing, hp: this.playerHp },
       bag: [...this.bag], dragonLoot: [...this.dragonLoot], minerals: { ...this.mineralInventory },
@@ -2343,8 +2343,8 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  private damagePlayer(amount: number, attackerName: string, fromFish = false) {
-    if (this.playerInvuln > 0) return;
+  private damagePlayer(amount: number, attackerName: string, fromFish = false): boolean {
+    if (this.playerInvuln > 0) return false;
     if (fromFish && this.fleet.equipped === 'sturdy') this.armorRemaining = COMBAT.armorSeconds;
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
     const reducedAmount = Math.max(1, Math.ceil(amount / defense));
@@ -2353,15 +2353,40 @@ export class OceanScene extends Phaser.Scene {
     this.showNotice(`${attackerName}의 공격! (-${reducedAmount} HP)`);
 
     if (this.playerHp <= 0) {
-      this.audio.playDeath();
-      this.playerHp = this.maxHp;
-      this.bag = [];
-      this.changeZone(0, 120, false);
-      this.showNotice('체력이 다 떨어져서 초심층으로 복귀했어요! (HP 회복)');
-    } else {
-      this.audio.playDamage();
+      this.respawnAfterDeath();
+      return true;
     }
+    this.audio.playDamage();
     this.updateHud();
+    return false;
+  }
+
+  private respawnAfterDeath() {
+    const previousSub = this.fleet.equipped;
+    this.audio.playDeath();
+    this.playerHp = this.maxHp;
+    this.bag = [];
+    this.dragonLoot = [];
+    for (const { name } of MINERAL_TABLE) this.mineralInventory[name] = 0;
+    this.fleet = damageEquippedSubmarine(this.fleet);
+    this.armorRemaining = 0;
+    this.armorGraphics.clear();
+    this.resetHeldInput();
+    for (const bullet of this.bullets) bullet.gfx.destroy();
+    this.bullets = [];
+    this.applySubmarine();
+
+    const { width, height } = this.scale;
+    this.player.x = width / 2;
+    this.changeZone(0, Math.min(120, height / 2), false);
+
+    // 저장 후 새로고침해도 잃은 소재나 파손 전 잠수함이 복구되지 않습니다.
+    const data = this.captureSave();
+    const saved = writeSave(data);
+    this.savedGame = { data, error: null };
+    const repair = previousSub === 'basic' ? '' : `\n${getSubmarine(previousSub).name} 파손 · 일반 잠수함으로 교체 (5분 수리)`;
+    const saveNotice = saved ? '' : '\n자동 저장 실패. 브라우저 저장 설정을 확인해 주세요.';
+    this.showNotice(`초심층으로 복귀했어요! HP 회복 · 보유 소재와 가방 속 물고기 전부 잃음${repair}${saveNotice}`);
   }
 
   private changeZone(nextIndex: number, spawnY: number, playSound = true) {
@@ -2615,8 +2640,9 @@ export class OceanScene extends Phaser.Scene {
       this.spawnOneFish(false);
     }
 
-    this.updateDragon(dt);
     const zoneBeforeBoss = this.zoneIndex;
+    this.updateDragon(dt);
+    if (this.zoneIndex !== zoneBeforeBoss) return;
     this.helicoprion.update(dt);
     // 보스 공격으로 쓰러지면 초심층으로 이동하므로 이번 프레임은 여기서 끝냅니다.
     if (this.zoneIndex !== zoneBeforeBoss) return;
@@ -2705,9 +2731,7 @@ export class OceanScene extends Phaser.Scene {
         fish.sprite.x += (dx / dist) * chaseSpeed * fishDt;
         fish.sprite.y += (dy / dist) * chaseSpeed * fishDt;
         this.setFishFacing(fish.sprite, fish.spec, dx > 0);
-        if (dist < 34) {
-          this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name, true);
-        }
+        if (dist < 34 && this.damagePlayer(fish.spec.attack ?? 5, fish.spec.name, true)) return;
       } else {
         if (this.zoneIndex >= 2 && fish.spec.aggressive && !fish.spec.provokedOnly) {
           const distToPlayer = Phaser.Math.Distance.Between(this.player.x, this.player.y, fish.sprite.x, fish.sprite.y);

@@ -14,7 +14,22 @@ export const SUBMARINES: readonly Submarine[] = [
   { id: 'metal', name: '메탈 잠수함', grade: 2, color: '#a5f3fc', trim: '#0891b2', recipe: { 다이아몬드: 7 }, description: '은빛 금속 장갑과 청록색 다이아몬드', ability: '기본 방어 4배 · 끊어서 쏘는 노란 관통 레이저', speed: 1 },
   { id: 'baby_dragon', name: '아기 드래곤 잠수함', grade: 1, color: '#22d3ee', trim: '#0369a1', recipe: { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }, description: '수룡의 뿔·비늘·꼬리를 품은 아기 드래곤', ability: '스페이스바 / 발사를 누르는 동안 긴 푸른 브레스', speed: 1 },
 ];
-export interface FleetState { owned: string[]; equipped: string }
+const REPAIR_DURATION_MS = 5 * 60 * 1000;
+export interface FleetState { owned: string[]; equipped: string; repairUntil?: Record<string, number> }
+
+export function repairSeconds(state: FleetState, id: string, now = Date.now()): number {
+  return Math.max(0, Math.ceil(((state.repairUntil?.[id] ?? now) - now) / 1000));
+}
+
+export function damageEquippedSubmarine(state: FleetState, now = Date.now()): FleetState {
+  if (state.equipped === 'basic') return state;
+  const repairs = Object.entries(state.repairUntil ?? {}).filter(([, until]) => until > now);
+  return {
+    ...state,
+    equipped: 'basic',
+    repairUntil: { ...Object.fromEntries(repairs), [state.equipped]: now + REPAIR_DURATION_MS },
+  };
+}
 export const newFleet = (): FleetState => ({ owned: ['basic'], equipped: 'basic' });
 export const getSubmarine = (id: string) => SUBMARINES.find(sub => sub.id === id) ?? SUBMARINES[0];
 export const emptyResources = (): Resources => Object.fromEntries(MATERIALS.map(name => [name, 0])) as Resources;
@@ -34,7 +49,16 @@ export function normalizeFleet(value: unknown): FleetState | null {
     ? SUBMARINES.find(sub => sub.id === id)?.id ?? Object.entries(LEGACY_IDS).find(([key]) => key === id)?.[1] : undefined;
   const owned = state.owned.map(mapId);
   if (owned.some(id => !id)) return null;
-  return { owned: [...new Set(owned as string[])], equipped: mapId(state.equipped)! };
+  const fleet: FleetState = { owned: [...new Set(owned as string[])], equipped: mapId(state.equipped)! };
+  if (state.repairUntil === undefined) return fleet;
+  if (!state.repairUntil || typeof state.repairUntil !== 'object' || Array.isArray(state.repairUntil)) return null;
+  const repairs: Record<string, number> = {};
+  for (const [id, until] of Object.entries(state.repairUntil)) {
+    if (id === 'basic' || id === fleet.equipped || !fleet.owned.includes(id) ||
+        typeof until !== 'number' || !Number.isSafeInteger(until) || until < 0) return null;
+    repairs[id] = until;
+  }
+  return { ...fleet, repairUntil: repairs };
 }
 export function isFleetState(value: unknown): value is FleetState {
   const normalized = normalizeFleet(value);
@@ -47,10 +71,12 @@ export function missingMaterials(sub: Submarine, resources: Resources): string[]
     .filter(([name, count]) => resources[name] < count)
     .map(([name, count]) => `${name} ${count - resources[name]}개`);
 }
-export function craftOrEquip(state: FleetState, resources: Resources, id: string): { state: FleetState; resources: Resources; error: string | null } {
+export function craftOrEquip(state: FleetState, resources: Resources, id: string, now = Date.now()): { state: FleetState; resources: Resources; error: string | null } {
   if (MATERIALS.some(name => !Number.isInteger(resources[name]) || resources[name] < 0)) return { state, resources, error: '재료 수량을 확인할 수 없어요.' };
   const sub = SUBMARINES.find(item => item.id === id);
   if (!sub) return { state, resources, error: '없는 잠수함이에요.' };
+  const seconds = repairSeconds(state, id, now);
+  if (seconds > 0) return { state, resources, error: `수리 중이에요. ${seconds}초 뒤에 탑승할 수 있어요.` };
   const owned = state.owned.includes(id);
   if (!owned) {
     const missing = missingMaterials(sub, resources);
@@ -58,7 +84,10 @@ export function craftOrEquip(state: FleetState, resources: Resources, id: string
   }
   const remaining = { ...resources };
   if (!owned) for (const [name, count] of Object.entries(sub.recipe) as Array<[Material, number]>) remaining[name] -= count;
-  return { state: { owned: owned ? [...state.owned] : [...state.owned, id], equipped: id }, resources: remaining, error: null };
+  const next: FleetState = { owned: owned ? [...state.owned] : [...state.owned, id], equipped: id };
+  const repairs = Object.entries(state.repairUntil ?? {}).filter(([, until]) => until > now);
+  if (repairs.length) next.repairUntil = Object.fromEntries(repairs);
+  return { state: next, resources: remaining, error: null };
 }
 
 /** Each material changes the silhouette, fittings and surface of the craft. */

@@ -1,4 +1,4 @@
-import { SUBMARINES, getSubmarine, submarineImage, missingMaterials, MATERIALS, type Resources, type FleetState } from './Submarines.js';
+import { SUBMARINES, getSubmarine, submarineImage, missingMaterials, repairSeconds, MATERIALS, type Resources, type FleetState } from './Submarines.js';
 
 export class SubmarinePanel {
   private root = document.createElement('div');
@@ -14,6 +14,7 @@ export class SubmarinePanel {
   private closeButton = document.createElement('button');
   private open = false;
   private signature = '';
+  private repairTimer?: number;
   private resources: Resources;
   private oldTouchAction = { body: '', html: '' };
   private state: FleetState;
@@ -92,6 +93,7 @@ export class SubmarinePanel {
     document.body.style.touchAction = 'pan-y'; document.documentElement.style.touchAction = 'pan-y';
     this.open = true; this.modal.style.display = 'flex'; this.message.textContent = '';
     this.renderItems(); this.closeButton.focus({ preventScroll: true });
+    this.repairTimer = window.setInterval(() => this.updateRepairButtons(), 250);
   }
   private renderItems() {
     this.list.replaceChildren();
@@ -116,6 +118,7 @@ export class SubmarinePanel {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'ocean-fleet-button';
       button.textContent = equipped ? '탑승 중' : owned ? '탑승하기' : '제작 후 탑승';
       button.disabled = equipped || (!owned && missingMaterials(sub, this.resources).length > 0);
+      if (!equipped && owned && repairSeconds(this.state, sub.id) > 0) button.dataset.repairShip = sub.id;
       button.onclick = () => {
         const error = this.handlers.select(sub.id);
         this.message.textContent = error ?? `✅ ${sub.name} 탑승 완료! 저장됐어요.`;
@@ -123,13 +126,24 @@ export class SubmarinePanel {
       };
       item.append(image, grade, name, stats, ability, recipe, button); this.list.append(item);
     }
+    this.updateRepairButtons();
+  }
+  private updateRepairButtons() {
+    for (const button of this.list.querySelectorAll<HTMLButtonElement>('[data-repair-ship]')) {
+      const seconds = repairSeconds(this.state, button.dataset.repairShip!);
+      button.disabled = seconds > 0;
+      button.textContent = seconds > 0 ? `수리 중 · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : '탑승하기';
+      if (seconds === 0) delete button.dataset.repairShip;
+    }
   }
   private close() {
     if (!this.open) return;
+    window.clearInterval(this.repairTimer);
     document.body.style.touchAction = this.oldTouchAction.body; document.documentElement.style.touchAction = this.oldTouchAction.html;
     this.open = false; this.modal.style.display = 'none'; this.handlers.close(); this.shopButton.focus({ preventScroll: true });
   }
   destroy() {
+    window.clearInterval(this.repairTimer);
     if (this.open) { document.body.style.touchAction = this.oldTouchAction.body; document.documentElement.style.touchAction = this.oldTouchAction.html; }
     window.removeEventListener('keydown', this.onKey); this.root.remove(); }
 }

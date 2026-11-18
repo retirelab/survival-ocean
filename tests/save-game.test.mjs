@@ -1,4 +1,5 @@
 import { test, beforeEach } from 'node:test';
+import { craftOrEquip, damageEquippedSubmarine, emptyResources, repairSeconds } from '../.test-build/Submarines.js';
 import assert from 'node:assert/strict';
 import { readSave, writeSave, isSaveGame, resolveProgress, SAVE_KEY, MAX_ZONE_INDEX } from '../.test-build/SaveGame.js';
 
@@ -151,4 +152,37 @@ test('helicoprion nest progress round-trips and rejects broken boss data', () =>
     { hp: 100, respawn: 0, bombs: [0, 0, 0, 21] },
     null,
   ]) assert.equal(writeSave({ ...data, helicoprion }), false);
+});
+
+
+test('a damaged submarine is kept but cannot be equipped until five minutes after death, even after reload', () => {
+  const data = sample();
+  const now = data.savedAt;
+  const fleet = { owned: ['basic', 'metal', 'ice'], equipped: 'metal' };
+  data.submarines = damageEquippedSubmarine(fleet, now);
+  assert.equal(writeSave(data), true);
+  const restored = readSave().data.submarines;
+  assert.deepEqual(restored.owned, fleet.owned);
+  assert.equal(restored.equipped, 'basic');
+  assert.equal(repairSeconds(restored, 'metal', now), 300);
+  const resources = emptyResources();
+  assert.match(craftOrEquip(restored, resources, 'metal', now + 299_999).error, /수리 중/);
+  const other = craftOrEquip(restored, resources, 'ice', now + 1000).state;
+  const secondDeath = damageEquippedSubmarine(other, now + 2000);
+  assert.equal(repairSeconds(secondDeath, 'metal', now + 2000), 298);
+  assert.equal(repairSeconds(secondDeath, 'ice', now + 2000), 300);
+  assert.strictEqual(damageEquippedSubmarine(secondDeath, now + 3000), secondDeath);
+  const repaired = craftOrEquip(secondDeath, resources, 'metal', now + 300_000);
+  assert.equal(repaired.error, null);
+  assert.equal(repaired.state.equipped, 'metal');
+  assert.deepEqual(repaired.resources, resources);
+  assert.equal(repairSeconds(repaired.state, 'ice', now + 300_000), 2);
+});
+
+test('save validation rejects repair records for the basic, equipped, or unowned submarine', () => {
+  const data = sample();
+  for (const repairUntil of [{ basic: 100 }, { ice: 100 }, { metal: 100 }, { sturdy: -1 }]) {
+    data.submarines = { owned: ['basic', 'ice', 'sturdy'], equipped: 'ice', repairUntil };
+    assert.equal(writeSave(data), false);
+  }
 });
