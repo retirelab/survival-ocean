@@ -1,11 +1,25 @@
 import { normalizeFleet, type FleetState } from './Submarines.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
+/** 마지막 구역(열수분출공층) 번호. 구역을 추가하면 함께 올려야 합니다. */
+export const MAX_ZONE_INDEX = 6;
+export const BASE_MAX_LEVEL = 20;
+export const EXPANDED_MAX_LEVEL = 40;
+/** 강화 메뉴 단계(기본~GOLD)와 수룡 구역 번호. 강화 단계는 0~3까지만 존재합니다. */
+const MAX_UPGRADE_STAGE = 3;
+
+export interface SaveProgress {
+  /** 빙하수 골짜기 진입으로 최대 레벨이 40으로 확장되었는지 */
+  maxLevelExpanded: boolean;
+  /** 수룡 갈무리 3회로 아래 통로가 열렸는지 */
+  dragonPassUnlocked: boolean;
+}
 
 export interface SaveGame {
   version: 1;
   submarines?: FleetState;
   combat?: { armorRemaining: number; shockCooldown: number };
+  progress?: SaveProgress;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -34,8 +48,13 @@ const strings = (value: unknown, max: number) => Array.isArray(value) && value.l
 
 export function isSaveGame(value: unknown): value is SaveGame {
   if (!object(value) || value.version !== 1 || !number(value.savedAt, 0, 1e15) ||
-      !integer(value.zoneIndex, 0, 3) || !integer(value.level, 1, 20) ||
+      !integer(value.zoneIndex, 0, MAX_ZONE_INDEX) || !integer(value.level, 1, EXPANDED_MAX_LEVEL) ||
       (value.submarines !== undefined && !normalizeFleet(value.submarines))) return false;
+  const progress = value.progress;
+  if (progress !== undefined && (!object(progress) || typeof progress.maxLevelExpanded !== 'boolean' ||
+      typeof progress.dragonPassUnlocked !== 'boolean')) return false;
+  const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
+  if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;
   if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30))) return false;
   const { player: p, stats: s, dragon: d, menu: m, upgrades: u, minerals: minerals } = value;
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
@@ -43,15 +62,28 @@ export function isSaveGame(value: unknown): value is SaveGame {
     strings(value.bag, 12) && strings(value.dragonLoot, 100000) &&
     ['다이아몬드', '루비', '사파이어', '토파즈', '부싯돌'].every(key => integer(minerals[key], 0, 1e9)) &&
     ['rapid', 'defense', 'attack'].every(key => integer(u[key], 0, 4)) &&
-    Array.isArray(value.completedStages) && value.completedStages.length <= 4 && value.completedStages.every(v => integer(v, 0, 3)) &&
+    Array.isArray(value.completedStages) && value.completedStages.length <= 4 && value.completedStages.every(v => integer(v, 0, MAX_UPGRADE_STAGE)) &&
     ['attack', 'defense', 'rapid', 'bulletSpeed'].every(key => number(s[key], 0.1, 100)) &&
     typeof s.autoFire === 'boolean' && number(s.regenAmount, 0, 10) && number(s.regenInterval, 0, 20) && number(s.regenTimer, -1, 20) &&
     ['sleeping', 'awake', 'dead', 'respawning'].includes(d.state as string) && number(d.hp, 0, 1250) &&
     integer(d.harvests, 0, 3) && number(d.respawn, 0, 300) && number(d.cooldown, -1, 30) &&
     Array.isArray(value.ores) && value.ores.length <= 4 && new Set(value.ores.map(ore => object(ore) ? ore.id : null)).size === value.ores.length &&
     value.ores.every(ore => object(ore) && ['upper', 'lower', 'upper_left', 'lower_right'].includes(ore.id as string) && integer(ore.remaining, 0, 5) && number(ore.respawn, 0, 60)) &&
-    integer(m.stage, 0, 3) && typeof m.upgrading === 'boolean' &&
-    (m.nextZone === null || integer(m.nextZone, 0, 3)) && number(m.spawnY, 0, 1);
+    integer(m.stage, 0, MAX_UPGRADE_STAGE) && typeof m.upgrading === 'boolean' &&
+    (m.nextZone === null || integer(m.nextZone, 0, MAX_ZONE_INDEX)) && number(m.spawnY, 0, 1);
+}
+
+/**
+ * 저장에 기록된 진행 플래그를 돌려줍니다. progress가 없는 예전 저장은 남은 정보로 추정합니다.
+ * 빙하수 골짜기(4번) 이하로 내려간 적이 있으면 두 플래그 모두 켜진 상태입니다.
+ */
+export function resolveProgress(save: SaveGame): SaveProgress {
+  const deep = save.zoneIndex >= 4;
+  const harvested = save.dragon.state === 'respawning' || save.dragon.harvests >= 3;
+  return {
+    maxLevelExpanded: deep || save.level > BASE_MAX_LEVEL || (save.progress?.maxLevelExpanded ?? false),
+    dragonPassUnlocked: deep || (save.progress?.dragonPassUnlocked ?? harvested),
+  };
 }
 
 export function readSave(): { data: SaveGame | null; error: string | null } {

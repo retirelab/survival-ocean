@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSave, writeSave, isSaveGame, SAVE_KEY } from '../.test-build/SaveGame.js';
+import { readSave, writeSave, isSaveGame, resolveProgress, SAVE_KEY, MAX_ZONE_INDEX } from '../.test-build/SaveGame.js';
 
 const sample = () => ({
   version: 1, savedAt: 1794772800000, zoneIndex: 3, level: 20,
@@ -42,7 +42,10 @@ test('invalid nested values cannot reach the scene', () => {
   for (const change of [
     data => delete data.stats,
     data => data.player.hp = NaN,
-    data => data.zoneIndex = 4,
+    data => data.zoneIndex = MAX_ZONE_INDEX + 1,
+    data => data.level = 21,
+    data => data.level = 41,
+    data => data.progress = { maxLevelExpanded: 'yes', dragonPassUnlocked: true },
     data => data.level = 1.5,
     data => data.upgrades.attack = 5,
     data => delete data.minerals['루비'],
@@ -101,4 +104,30 @@ test('four mining rocks round-trip while older two-rock saves remain valid', () 
   assert.deepEqual(readSave().data.ores, data.ores);
   data.ores.push({ id: 'unknown', remaining: 5, respawn: 0 });
   assert.equal(writeSave(data), false);
+});
+
+test('post-dragon depths and expanded levels can be saved and loaded', () => {
+  for (const zoneIndex of [4, 5, MAX_ZONE_INDEX]) {
+    const data = { ...sample(), zoneIndex, level: 40,
+      progress: { maxLevelExpanded: true, dragonPassUnlocked: true } };
+    assert.equal(writeSave(data), true, `zone ${zoneIndex}`);
+    assert.deepEqual(readSave().data, data);
+  }
+  // 빙하수 골짜기를 다녀온 뒤 지하세계로 올라와 저장해도 확장 레벨을 유지합니다.
+  const back = { ...sample(), zoneIndex: 3, level: 27, progress: { maxLevelExpanded: true, dragonPassUnlocked: true } };
+  assert.equal(writeSave(back), true);
+  assert.deepEqual(resolveProgress(readSave().data), back.progress);
+  // 강화 메뉴의 대기 구역도 새 구역 번호를 허용합니다.
+  const pending = { ...sample(), menu: { stage: 3, upgrading: true, nextZone: 5, spawnY: 0.07 } };
+  assert.equal(writeSave(pending), true);
+});
+
+test('legacy saves without progress flags derive them from the dragon state', () => {
+  assert.deepEqual(resolveProgress(sample()), { maxLevelExpanded: false, dragonPassUnlocked: false });
+  const harvested = sample(); harvested.dragon = { state: 'respawning', hp: 0, harvests: 3, respawn: 120, cooldown: 0 };
+  assert.deepEqual(resolveProgress(harvested), { maxLevelExpanded: false, dragonPassUnlocked: true });
+  const deep = { ...sample(), zoneIndex: 4 };
+  assert.deepEqual(resolveProgress(deep), { maxLevelExpanded: true, dragonPassUnlocked: true });
+  const explicit = { ...harvested, progress: { maxLevelExpanded: false, dragonPassUnlocked: false } };
+  assert.equal(resolveProgress(explicit).dragonPassUnlocked, false);
 });
