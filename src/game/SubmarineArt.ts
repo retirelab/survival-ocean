@@ -177,32 +177,41 @@ const metal = () => ({
     ${porthole(106, 39, 7, '#64748b', '#a5f3fc')}`,
 });
 
-/** 아기 드래곤 잠수함: 뿔 달린 머리, 비늘 무늬, 지느러미 날개, 말린 꼬리, 물방울 */
+/** 아기 드래곤 잠수함: 동글동글한 몸과 큰 머리, 반짝이는 큰 눈, 볼터치, 작은 뿔과 날개, 말린 꼬리 */
 const babyDragon = () => ({
-  defs: `${vertical('hull', [[0, '#a5f3fc'], [0.45, '#06b6d4'], [1, '#155e75']])}${vertical('belly', [[0, '#ecfeff'], [1, '#a5f3fc']])}${vertical('wing', [[0, '#67e8f9'], [1, '#0e7490']])}
-    <pattern id="scales" width="7" height="6" patternUnits="userSpaceOnUse"><path d="M0 6Q3.5 0 7 6" fill="none" stroke="#0e7490" stroke-width="1.1" opacity="0.6"/></pattern>
-    ${glassGradient('#fef9c3', '#0c4a6e')}`,
+  defs: `<radialGradient id="hull" cx="0.4" cy="0.3" r="0.75"><stop offset="0" stop-color="#cffafe"/><stop offset="0.5" stop-color="#5eead4"/><stop offset="1" stop-color="#0d9488"/></radialGradient>
+    ${vertical('belly', [[0, '#fffbeb'], [1, '#fde68a']])}${vertical('wing', [[0, '#a5f3fc'], [1, '#38bdf8']])}
+    <radialGradient id="eye" cx="0.45" cy="0.4" r="0.7"><stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#0b1324"/></radialGradient>`,
   body: `
-    <path fill="url(#hull)" d="M36 44Q18 52 10 40Q4 30 12 24Q18 22 18 28Q14 32 18 36Q24 40 34 36Z"/>
-    <path fill="#22d3ee" d="M12 24 4 16 10 30Z M10 40 0 44 12 46Z"/>
-    <path fill="url(#wing)" d="M44 30Q38 8 50 2Q54 14 60 12Q62 4 70 2Q70 16 74 28Z"/>
-    <path fill="none" stroke="#cffafe" stroke-width="1.2" d="M50 4 54 28M70 4 66 28"/>
-    <ellipse fill="url(#hull)" cx="62" cy="44" rx="32" ry="18"/>
-    <ellipse fill="url(#scales)" stroke="none" cx="60" cy="40" rx="27" ry="12"/>
-    <path fill="url(#belly)" d="M40 50Q62 62 90 50Q86 62 62 62Q44 62 40 50Z"/>
-    <path fill="none" stroke="#67e8f9" stroke-width="1" d="M50 54V60M60 56V62M70 56V61M80 53V58"/>
-    <path fill="#67e8f9" d="M46 28 50 22 54 28Z M56 26 60 19 64 26Z M66 26 70 20 74 27Z"/>
-    <path fill="url(#hull)" d="M84 30Q92 18 108 22L122 32Q126 38 120 44L106 50Q94 52 86 46Z"/>
-    <path fill="url(#belly)" d="M100 46 120 42Q118 48 106 50Z"/>
-    <path fill="#fef3c7" stroke="#a8a29e" d="M92 24 86 6 98 21Z M102 22 106 6 108 24Z"/>
-    <path fill="#22d3ee" d="M90 30 82 26 88 36Z"/>
-    <circle fill="#0c4a6e" cx="106" cy="31" r="6"/><circle fill="url(#glass)" stroke="none" cx="106" cy="31" r="4.2"/>
-    <circle fill="#ffffff" stroke="none" cx="107.5" cy="29.5" r="1.4"/>
-    <path fill="#ffffff" stroke="none" d="M114 44 112 49 110 44.5Z M118 43 117 47 115.5 43.5Z"/>
-    <circle fill="#0c4a6e" stroke="none" cx="121" cy="35" r="1"/>
-    <path fill="#0891b2" d="M48 58 42 70H58L60 60Z M74 60 78 70H94L88 56Z"/>
-    ${[[122, 26, 0], [126, 18, 0.6], [119, 12, 1.2]].map(([x, y, d]) => `<circle fill="#cffafe" stroke="#67e8f9" stroke-width="0.8" cx="${x}" cy="${y}" r="2"><animate attributeName="cy" values="${y};${y - 8};${y}" dur="2s" begin="${d}s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2s" begin="${d}s" repeatCount="indefinite"/></circle>`).join('')}
-    ${sparkle(58, 36, 3, '#ecfeff', 0.3, 2)}${sparkle(76, 42, 2.5, '#ecfeff', 1.1, 2)}`,
+    <path fill="url(#hull)" d="M34 50Q18 58 10 50Q4 44 8 37Q12 32 17 35Q20 38 16 42Q14 46 20 47Q26 47 32 42Z"/>
+    <path fill="#fda4af" d="M9 37Q4 31 7 26Q11 30 13 34Z"/>
+    <g><path fill="url(#wing)" d="M48 30Q42 14 52 10Q54 18 58 18Q60 10 66 12Q66 20 68 30Z"/>
+      <path fill="none" stroke="#e0f2fe" stroke-width="1.2" d="M52 14 55 28M62 15 62 28"/>
+      <animateTransform attributeName="transform" type="rotate" values="0 58 30;-10 58 30;0 58 30" dur="0.9s" repeatCount="indefinite"/></g>
+    <ellipse fill="url(#hull)" cx="56" cy="46" rx="26" ry="18"/>
+    <path fill="url(#belly)" d="M38 50Q56 66 76 52Q74 63 56 64Q40 63 38 50Z"/>
+    <path fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.6" d="M46 56Q56 60 68 56M48 60Q56 63 66 60"/>
+    <g fill="#f0abfc" stroke="#0b1324" stroke-width="1.6">
+      <path d="M40 32Q42 26 46 30Z"/><path d="M50 28Q53 22 56 28Z"/><path d="M60 28Q63 23 66 30Z"/>
+    </g>
+    <ellipse fill="#99f6e4" cx="44" cy="64" rx="6" ry="5"/><ellipse fill="#99f6e4" cx="66" cy="65" rx="6" ry="5"/>
+    <path fill="none" stroke="#0d9488" stroke-width="1" d="M41 66V68M44 66V69M47 66V68M63 67V69M66 67V70M69 67V69"/>
+    <path fill="#5eead4" d="M84 22Q80 12 86 8Q90 14 92 18Z"/>
+    <path fill="#fef3c7" d="M92 16Q91 6 96 3Q99 9 98 15Z"/><path fill="#fef3c7" d="M104 14Q107 5 112 4Q112 11 108 16Z"/>
+    <circle fill="url(#hull)" cx="98" cy="36" r="22"/>
+    <ellipse fill="#ccfbf1" stroke="none" cx="110" cy="45" rx="11" ry="7"/>
+    <ellipse fill="#0b1324" stroke="none" cx="116" cy="41" rx="1.2" ry="1"/><ellipse fill="#0b1324" stroke="none" cx="111" cy="42" rx="1.2" ry="1"/>
+    <g><ellipse fill="url(#eye)" stroke="#0b1324" cx="100" cy="32" rx="7" ry="8.5"/>
+      <circle fill="#ffffff" stroke="none" cx="102.5" cy="28.5" r="3"/><circle fill="#ffffff" stroke="none" cx="97.5" cy="36" r="1.5"/>
+      <path fill="#7dd3fc" stroke="none" opacity="0.7" d="M94 35Q100 41 106 35Q104 40 100 40.5Q96 40 94 35Z"/>
+</g>
+    <g opacity="0"><ellipse fill="#5eead4" stroke="#0b1324" cx="100" cy="32" rx="7.5" ry="9"/><path fill="none" stroke="#0b1324" stroke-width="1.6" stroke-linecap="round" d="M93.5 33Q100 37 106.5 33"/>
+      <animate attributeName="opacity" values="0;0;1;0" keyTimes="0;0.9;0.95;1" dur="3.5s" repeatCount="indefinite"/></g>
+    <ellipse fill="#fda4af" stroke="none" opacity="0.85" cx="106" cy="44" rx="5" ry="3"/>
+    <path fill="none" stroke="#0b1324" stroke-width="1.6" stroke-linecap="round" d="M104 50Q108 53 113 50"/>
+    <path fill="#ffffff" stroke="#0b1324" stroke-width="1" d="M107.5 51.2 108.5 54 110 51.6Z"/>
+    ${[[121, 26, 0], [125, 18, 0.7], [119, 11, 1.4]].map(([x, y, d]) => `<circle fill="#e0f2fe" stroke="#67e8f9" stroke-width="0.8" cx="${x}" cy="${y}" r="2.2"><animate attributeName="cy" values="${y};${y - 8};${y}" dur="2s" begin="${d}s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2s" begin="${d}s" repeatCount="indefinite"/></circle>`).join('')}
+    ${sparkle(50, 40, 3, '#ffffff', 0.3, 2)}${sparkle(84, 26, 2.5, '#ffffff', 1.1, 2)}`,
 });
 
 const ART: Record<string, () => { defs: string; body: string }> = {
