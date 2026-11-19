@@ -305,6 +305,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonLoot: string[] = [];
   private dragonPassUnlocked = false;
   private helicoprion!: HelicoprionBoss;
+  private auraTimer = 0;
 
   private menuMode: MenuMode = null;
   private menuStage = 0;
@@ -588,6 +589,69 @@ export class OceanScene extends Phaser.Scene {
     this.breathGraphics?.clear();
     this.shootBtnText?.setText(this.fleet.equipped === 'baby_dragon' ? '🐉\n브레스' : '🔫\n발사');
     this.updateShockButton();
+  }
+
+  /** 잠수함 재료에 맞는 작은 효과(다이아몬드 반짝임, 불티, 눈송이, 전기 불꽃 등)를 주변에 띄웁니다. */
+  private updateSubmarineAura(dt: number) {
+    this.auraTimer -= dt;
+    if (this.auraTimer > 0) return;
+    const id = this.fleet.equipped;
+    const back = -this.facing;
+    const px = this.player.x;
+    const py = this.player.y;
+    const rand = Phaser.Math.FloatBetween;
+    const fade = (obj: Phaser.GameObjects.Shape | Phaser.GameObjects.Text, dx: number, dy: number, ms: number, scale = 1) => {
+      obj.setDepth(9);
+      this.tweens.add({ targets: obj, x: obj.x + dx, y: obj.y + dy, alpha: 0, scale, duration: ms, ease: 'Sine.easeOut', onComplete: () => obj.destroy() });
+    };
+    switch (id) {
+      case 'metal': {
+        this.auraTimer = 0.09;
+        const color = Phaser.Utils.Array.GetRandom([0xffffff, 0xa5f3fc, 0xf5d0fe, 0xfde68a, 0xbae6fd]);
+        const star = this.add.star(px + rand(-30, 30), py + rand(-18, 18), 4, 1, rand(3.5, 6), color).setAngle(rand(0, 45));
+        star.setScale(0.2);
+        this.tweens.add({ targets: star, scale: 1, angle: star.angle + 45, duration: 220, yoyo: true, onComplete: () => star.destroy() });
+        star.setDepth(11);
+        break;
+      }
+      case 'fire': {
+        this.auraTimer = 0.05;
+        const ember = this.add.circle(px + back * rand(28, 34), py + rand(-3, 3), rand(2.5, 4.5), Phaser.Utils.Array.GetRandom([0xfde047, 0xf97316, 0xef4444]));
+        fade(ember, back * rand(14, 30), rand(-14, -4), rand(320, 520), 0.3);
+        break;
+      }
+      case 'ice': {
+        this.auraTimer = 0.16;
+        const flake = this.add.text(px + rand(-28, 28), py + rand(-16, 16), '*', { fontSize: `${Math.round(rand(10, 15))}px`, color: '#f0f9ff', fontStyle: 'bold' }).setOrigin(0.5);
+        fade(flake, back * rand(8, 18), rand(8, 18), rand(700, 1000), 0.6);
+        break;
+      }
+      case 'electric': {
+        this.auraTimer = 0.14;
+        const angle = rand(0, Math.PI * 2);
+        const spark = this.add.line(0, 0, 0, 0, rand(6, 11), 0, 0xfef08a).setLineWidth(2).setOrigin(0, 0.5)
+          .setPosition(px + Math.cos(angle) * 22, py + Math.sin(angle) * 14).setRotation(angle);
+        fade(spark, Math.cos(angle) * 8, Math.sin(angle) * 8, 160);
+        break;
+      }
+      case 'baby_dragon': {
+        this.auraTimer = 0.2;
+        const bubble = this.add.circle(px + this.facing * rand(22, 30), py + rand(-14, -4), rand(2, 3.5), 0xcffafe, 0.85).setStrokeStyle(1, 0x67e8f9);
+        fade(bubble, rand(-4, 4), -rand(18, 30), rand(700, 1000), 0.6);
+        break;
+      }
+      case 'sturdy': {
+        this.auraTimer = 0.22;
+        const grit = this.add.rectangle(px + back * rand(26, 32), py + rand(4, 12), 3, 3, 0x71717a).setAngle(rand(0, 90));
+        fade(grit, back * rand(4, 10), rand(10, 18), 600);
+        break;
+      }
+      default: {
+        this.auraTimer = 0.3;
+        const bubble = this.add.circle(px + back * rand(28, 32), py + rand(-2, 4), rand(1.5, 2.8), 0xbae6fd, 0.8);
+        fade(bubble, back * rand(6, 12), -rand(14, 22), 800);
+      }
+    }
   }
 
   private resetHeldInput() {
@@ -2640,6 +2704,7 @@ export class OceanScene extends Phaser.Scene {
       this.spawnOneFish(false);
     }
 
+    this.updateSubmarineAura(dt);
     const zoneBeforeBoss = this.zoneIndex;
     this.updateDragon(dt);
     if (this.zoneIndex !== zoneBeforeBoss) return;
