@@ -1,5 +1,6 @@
 import { normalizeFleet, type FleetState } from './Submarines.js';
 import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
+import { isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
 /** 마지막 구역(헬리코프리온의 둥지) 번호. 구역을 추가하면 함께 올려야 합니다. */
@@ -22,6 +23,7 @@ export interface SaveGame {
   combat?: { armorRemaining: number; shockCooldown: number };
   progress?: SaveProgress;
   helicoprion?: HelicoprionSave;
+  abyssDragon?: AbyssDragonSave;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -56,6 +58,7 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (progress !== undefined && (!object(progress) || typeof progress.maxLevelExpanded !== 'boolean' ||
       typeof progress.dragonPassUnlocked !== 'boolean')) return false;
   if (value.helicoprion !== undefined && !isHelicoprionSave(value.helicoprion)) return false;
+  if (value.abyssDragon !== undefined && !isAbyssDragonSave(value.abyssDragon)) return false;
   const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
   if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;
   if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30))) return false;

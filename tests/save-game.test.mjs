@@ -186,3 +186,11 @@ test('save validation rejects repair records for the basic, equipped, or unowned
     assert.equal(writeSave(data), false);
   }
 });
+
+test('the hydrothermal dragon fight state is saved and validated', () => {
+  const data = { ...sample(), zoneIndex: 6, level: 30, progress: { maxLevelExpanded: true, dragonPassUnlocked: true },
+    dragonLoot: ['수룡의 역광비늘', '수룡의 머리뼈+'], abyssDragon: { state: 'evolved', hp: 2750, harvests: 0, respawn: 0 } };
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data, data);
+  assert.equal(writeSave({ ...data, abyssDragon: { state: 'evolved', hp: 5000, harvests: 0, respawn: 0 } }), false);
+});

@@ -6,6 +6,7 @@ import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
 import { HelicoprionBoss } from './HelicoprionBoss';
+import { AbyssDragonBoss } from './AbyssDragonBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
 import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, type SaveGame } from '../game/SaveGame';
 
@@ -166,6 +167,8 @@ const DRAGON_ZONE_INDEX = 3;
 const LAST_DEPTH_ZONE_INDEX = 6;
 const UNDERWORLD_2F_ZONE_INDEX = 5;
 const NEST_ZONE_INDEX = 7;
+/** 열수분출공층: 잠든 수룡 → 진화한 수룡 보스전 */
+const ABYSS_ZONE_INDEX = 6;
 const DRAGON_MAX_HP = 1250;
 const DRAGON_ATTACK_DAMAGE = 50;
 const DRAGON_RESPAWN_SECONDS = 5 * 60;
@@ -305,6 +308,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonLoot: string[] = [];
   private dragonPassUnlocked = false;
   private helicoprion!: HelicoprionBoss;
+  private abyssDragon!: AbyssDragonBoss;
   private auraTimer = 0;
 
   private menuMode: MenuMode = null;
@@ -353,6 +357,7 @@ export class OceanScene extends Phaser.Scene {
     this.load.image('water_dragon_skull', `${assetBase}/water-dragon-skull.png`);
     this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
     HelicoprionBoss.preload(this);
+    AbyssDragonBoss.preload(this);
     for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
     for (const { key } of UNDERWORLD_2F_FISH) this.load.image(key, `assets/fish/${key}.png`);
   }
@@ -493,6 +498,20 @@ export class OceanScene extends Phaser.Scene {
     this.helicoprion = new HelicoprionBoss(this, this.audio, {
       player: () => ({ x: this.player.x, y: this.player.y }),
       damagePlayer: (amount, attacker) => this.damagePlayer(amount, attacker),
+      showNotice: message => this.showNotice(message),
+      setHarvestButton: visible => {
+        this.harvestBtnBg.setVisible(visible);
+        this.harvestBtnText.setVisible(visible);
+      },
+      addLoot: item => {
+        this.dragonLoot.push(item);
+        this.updateHud();
+      },
+    });
+
+    this.abyssDragon = new AbyssDragonBoss(this, this.audio, {
+      player: () => ({ x: this.player.x, y: this.player.y }),
+      damagePlayer: (amount, attacker, ignoreInvuln) => this.damagePlayer(amount, attacker, false, ignoreInvuln),
       showNotice: message => this.showNotice(message),
       setHarvestButton: visible => {
         this.harvestBtnBg.setVisible(visible);
@@ -686,6 +705,7 @@ export class OceanScene extends Phaser.Scene {
       dragon: { state: this.dragonState, hp: this.dragonHp, harvests: this.dragonHarvests,
         respawn: this.dragonRespawnRemaining, cooldown: this.dragonAttackCooldown },
       helicoprion: this.helicoprion.snapshot(),
+      abyssDragon: this.abyssDragon.snapshot(),
       ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
       menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
         nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
@@ -738,6 +758,8 @@ export class OceanScene extends Phaser.Scene {
     // 둥지에서 이어하면 보스전이 다시 시작되며 첫 공격 전 대기시간을 줍니다.
     this.helicoprion.leave();
     this.helicoprion.load(save.helicoprion);
+    this.abyssDragon.leave();
+    this.abyssDragon.load(save.abyssDragon);
     const { width, height } = this.scale;
     this.changeZone(save.zoneIndex, Phaser.Math.Clamp(save.player.y * height, 28, height - 28), false);
     this.player.x = Phaser.Math.Clamp(save.player.x * width, 24, width - 24);
@@ -1364,6 +1386,7 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
     this.layoutDragon();
     this.helicoprion?.layout(width, height);
+    this.abyssDragon?.layout(width, height);
     this.updateMiningInteraction();
     if (this.menuMode) this.rebuildMenu();
   }
@@ -1718,6 +1741,7 @@ export class OceanScene extends Phaser.Scene {
 
   private tryHarvest() {
     if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.tryHarvest();
+    else if (this.zoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.tryHarvest();
     else this.tryHarvestDragon();
   }
 
@@ -2358,6 +2382,7 @@ export class OceanScene extends Phaser.Scene {
       else if (segmentHitsRect(ax, ay, bx, by, hitboxes.body)) this.damageDragon(this.bulletDamage * this.attackMultiplier);
     }
     if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.hitSegment(ax, ay, bx, by, COMBAT.breathRadius, this.bulletDamage * this.attackMultiplier);
+    if (this.zoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.hitSegment(ax, ay, bx, by, COMBAT.breathRadius, this.bulletDamage * this.attackMultiplier);
   }
 
   private tryCollectNearbyFish() {
@@ -2407,13 +2432,14 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  private damagePlayer(amount: number, attackerName: string, fromFish = false): boolean {
-    if (this.playerInvuln > 0) return false;
+  private damagePlayer(amount: number, attackerName: string, fromFish = false, ignoreInvuln = false): boolean {
+    if (this.playerInvuln > 0 && !ignoreInvuln) return false;
     if (fromFish && this.fleet.equipped === 'sturdy') this.armorRemaining = COMBAT.armorSeconds;
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
     const reducedAmount = Math.max(1, Math.ceil(amount / defense));
     this.playerHp = Math.max(0, this.playerHp - reducedAmount);
-    this.playerInvuln = 1.0;
+    // 긴 브레스처럼 연속으로 들어오는 피해는 무적시간을 만들지 않습니다.
+    if (!ignoreInvuln) this.playerInvuln = 1.0;
     this.showNotice(`${attackerName}의 공격! (-${reducedAmount} HP)`);
 
     if (this.playerHp <= 0) {
@@ -2457,6 +2483,7 @@ export class OceanScene extends Phaser.Scene {
     const previousZoneIndex = this.zoneIndex;
     if (previousZoneIndex === DRAGON_ZONE_INDEX) this.setDragonZoneVisibility(false);
     if (previousZoneIndex === NEST_ZONE_INDEX) this.helicoprion.leave();
+    if (previousZoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.leave();
     for (const f of this.fishList) {
       f.sprite.destroy();
       f.label.destroy();
@@ -2487,6 +2514,7 @@ export class OceanScene extends Phaser.Scene {
       }`
     );
     if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.enter();
+    if (this.zoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.enter();
     this.updateHud();
   }
 
@@ -2505,7 +2533,7 @@ export class OceanScene extends Phaser.Scene {
     const lootSummary = lootCounts.size > 0
       ? ` | 전리품: ${[...lootCounts].map(([name, count]) => `${name.replace('헬리코프리온의 ', '헬리 ').replace('수룡의 ', '수룡 ')}×${count}`).join(' ')}`
       : '';
-    const population = this.zoneIndex === DRAGON_ZONE_INDEX ? '수룡 전용 구역'
+    const population = this.zoneIndex === DRAGON_ZONE_INDEX || this.zoneIndex === ABYSS_ZONE_INDEX ? '수룡 전용 구역'
       : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
     this.updateShockButton();
@@ -2625,6 +2653,9 @@ export class OceanScene extends Phaser.Scene {
       this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
     }
     this.preventPlayerInsideDragon(previousPlayerX, previousPlayerY);
+    if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(this.player.x, this.player.y)) {
+      this.player.setPosition(previousPlayerX, previousPlayerY);
+    }
     this.drawAimGuide();
     this.updateMiningInteraction();
 
@@ -2711,6 +2742,8 @@ export class OceanScene extends Phaser.Scene {
     this.helicoprion.update(dt);
     // 보스 공격으로 쓰러지면 초심층으로 이동하므로 이번 프레임은 여기서 끝냅니다.
     if (this.zoneIndex !== zoneBeforeBoss) return;
+    this.abyssDragon.update(dt);
+    if (this.zoneIndex !== zoneBeforeBoss) return;
     this.updateDragonBreath(dt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
@@ -2741,6 +2774,8 @@ export class OceanScene extends Phaser.Scene {
         this.damageDragon(b.damage);
         hit = true;
       } else if (this.zoneIndex === NEST_ZONE_INDEX && this.helicoprion.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 6, b.damage)) {
+        hit = true;
+      } else if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 0, b.damage)) {
         hit = true;
       }
       for (const fish of this.fishList) {
