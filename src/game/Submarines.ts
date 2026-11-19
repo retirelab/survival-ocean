@@ -13,7 +13,7 @@ export const SUBMARINES: readonly Submarine[] = [
   { id: 'ice', name: '얼음속성 잠수함', grade: 3, color: '#60a5fa', trim: '#1d4ed8', recipe: { 사파이어: 5, 부싯돌: 10 }, description: '사파이어 결정 면과 얼음 가시, 고드름이 달린 투명한 선체', ability: '고드름 명중 시 3초간 이동 속도 50% 감소', speed: 1 },
   { id: 'electric', name: '전기속성 잠수함', grade: 3, color: '#fbbf24', trim: '#b45309', recipe: { 토파즈: 6, 부싯돌: 10 }, description: '번개 치는 토파즈 코어와 테슬라 코일, 경고 줄무늬', ability: 'B / 전기일격: 주변 물고기 5초 마비 · 재사용 30초', speed: 1 },
   { id: 'metal', name: '메탈 잠수함', grade: 2, color: '#a5f3fc', trim: '#0891b2', recipe: { 다이아몬드: 7 }, description: '거울 같은 은빛 선체에 박힌 브릴리언트 컷 다이아몬드와 무지갯빛 반짝임', ability: '기본 방어 4배 · 끊어서 쏘는 노란 관통 레이저', speed: 1 },
-  { id: 'baby_dragon', name: '아기 드래곤 잠수함', grade: 1, color: '#22d3ee', trim: '#0369a1', recipe: { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }, description: '반짝이는 큰 눈과 볼터치, 작은 뿔과 파닥이는 날개를 가진 동글동글 아기 드래곤', ability: '스페이스바 / 발사를 누르는 동안 긴 푸른 브레스', speed: 1 },
+  { id: 'baby_dragon', name: '아기 드래곤 잠수함', grade: 1, color: '#22d3ee', trim: '#0369a1', recipe: { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }, description: '수룡의 뿔·비늘·꼬리를 품은 아기 드래곤', ability: '스페이스바 / 발사를 누르는 동안 긴 푸른 브레스', speed: 1 },
 ];
 const REPAIR_DURATION_MS = 5 * 60 * 1000;
 export interface FleetState { owned: string[]; equipped: string; repairUntil?: Record<string, number> }

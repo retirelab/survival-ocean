@@ -177,48 +177,26 @@ const metal = () => ({
     ${porthole(106, 39, 7, '#64748b', '#a5f3fc')}`,
 });
 
-/** 아기 드래곤 잠수함: 동글동글한 몸과 큰 머리, 반짝이는 큰 눈, 볼터치, 작은 뿔과 날개, 말린 꼬리 */
-const babyDragon = () => ({
-  defs: `<radialGradient id="hull" cx="0.4" cy="0.3" r="0.75"><stop offset="0" stop-color="#cffafe"/><stop offset="0.5" stop-color="#5eead4"/><stop offset="1" stop-color="#0d9488"/></radialGradient>
-    ${vertical('belly', [[0, '#fffbeb'], [1, '#fde68a']])}${vertical('wing', [[0, '#a5f3fc'], [1, '#38bdf8']])}
-    <radialGradient id="eye" cx="0.45" cy="0.4" r="0.7"><stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#0b1324"/></radialGradient>`,
-  body: `
-    <path fill="url(#hull)" d="M34 50Q18 58 10 50Q4 44 8 37Q12 32 17 35Q20 38 16 42Q14 46 20 47Q26 47 32 42Z"/>
-    <path fill="#fda4af" d="M9 37Q4 31 7 26Q11 30 13 34Z"/>
-    <g><path fill="url(#wing)" d="M48 30Q42 14 52 10Q54 18 58 18Q60 10 66 12Q66 20 68 30Z"/>
-      <path fill="none" stroke="#e0f2fe" stroke-width="1.2" d="M52 14 55 28M62 15 62 28"/>
-      <animateTransform attributeName="transform" type="rotate" values="0 58 30;-10 58 30;0 58 30" dur="0.9s" repeatCount="indefinite"/></g>
-    <ellipse fill="url(#hull)" cx="56" cy="46" rx="26" ry="18"/>
-    <path fill="url(#belly)" d="M38 50Q56 66 76 52Q74 63 56 64Q40 63 38 50Z"/>
-    <path fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.6" d="M46 56Q56 60 68 56M48 60Q56 63 66 60"/>
-    <g fill="#f0abfc" stroke="#0b1324" stroke-width="1.6">
-      <path d="M40 32Q42 26 46 30Z"/><path d="M50 28Q53 22 56 28Z"/><path d="M60 28Q63 23 66 30Z"/>
-    </g>
-    <ellipse fill="#99f6e4" cx="44" cy="64" rx="6" ry="5"/><ellipse fill="#99f6e4" cx="66" cy="65" rx="6" ry="5"/>
-    <path fill="none" stroke="#0d9488" stroke-width="1" d="M41 66V68M44 66V69M47 66V68M63 67V69M66 67V70M69 67V69"/>
-    <path fill="#5eead4" d="M84 22Q80 12 86 8Q90 14 92 18Z"/>
-    <path fill="#fef3c7" d="M92 16Q91 6 96 3Q99 9 98 15Z"/><path fill="#fef3c7" d="M104 14Q107 5 112 4Q112 11 108 16Z"/>
-    <circle fill="url(#hull)" cx="98" cy="36" r="22"/>
-    <ellipse fill="#ccfbf1" stroke="none" cx="110" cy="45" rx="11" ry="7"/>
-    <ellipse fill="#0b1324" stroke="none" cx="116" cy="41" rx="1.2" ry="1"/><ellipse fill="#0b1324" stroke="none" cx="111" cy="42" rx="1.2" ry="1"/>
-    <g><ellipse fill="url(#eye)" stroke="#0b1324" cx="100" cy="32" rx="7" ry="8.5"/>
-      <circle fill="#ffffff" stroke="none" cx="102.5" cy="28.5" r="3"/><circle fill="#ffffff" stroke="none" cx="97.5" cy="36" r="1.5"/>
-      <path fill="#7dd3fc" stroke="none" opacity="0.7" d="M94 35Q100 41 106 35Q104 40 100 40.5Q96 40 94 35Z"/>
-</g>
-    <g opacity="0"><ellipse fill="#5eead4" stroke="#0b1324" cx="100" cy="32" rx="7.5" ry="9"/><path fill="none" stroke="#0b1324" stroke-width="1.6" stroke-linecap="round" d="M93.5 33Q100 37 106.5 33"/>
-      <animate attributeName="opacity" values="0;0;1;0" keyTimes="0;0.9;0.95;1" dur="3.5s" repeatCount="indefinite"/></g>
-    <ellipse fill="#fda4af" stroke="none" opacity="0.85" cx="106" cy="44" rx="5" ry="3"/>
-    <path fill="none" stroke="#0b1324" stroke-width="1.6" stroke-linecap="round" d="M104 50Q108 53 113 50"/>
-    <path fill="#ffffff" stroke="#0b1324" stroke-width="1" d="M107.5 51.2 108.5 54 110 51.6Z"/>
-    ${[[121, 26, 0], [125, 18, 0.7], [119, 11, 1.4]].map(([x, y, d]) => `<circle fill="#e0f2fe" stroke="#67e8f9" stroke-width="0.8" cx="${x}" cy="${y}" r="2.2"><animate attributeName="cy" values="${y};${y - 8};${y}" dur="2s" begin="${d}s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2s" begin="${d}s" repeatCount="indefinite"/></circle>`).join('')}
-    ${sparkle(50, 40, 3, '#ffffff', 0.3, 2)}${sparkle(84, 26, 2.5, '#ffffff', 1.1, 2)}`,
-});
+/** 아기 드래곤 잠수함: 원래 게임에 있던 외형을 그대로 씁니다(테두리 색·두께 포함). */
+const ORIGINAL_BABY_DRAGON = `<g stroke="#082f49" stroke-width="2.2" stroke-linejoin="round"><path fill="#0369a1" stroke="#0c4a6e" d="M42 40Q10 54 7 24L22 34 15 16 37 30Z"/>
+      <path fill="#38bdf8" stroke="#075985" d="M37 34 32 9 51 20 65 6 69 33Z"/>
+      <ellipse fill="#0891b2" cx="64" cy="44" rx="35" ry="20"/>
+      <path fill="#bae6fd" stroke="#0284c7" d="M52 48Q63 42 77 48L77 61Q63 68 52 59Z"/>
+      <path fill="#22d3ee" stroke="#075985" d="M72 29Q82 14 103 23L118 38 114 50 93 54 80 47Z"/>
+      <path fill="#fef3c7" stroke="#a8a29e" d="M82 25 78 7 91 23 M98 24 104 10 107 30"/>
+      <path fill="#0284c7" d="M38 55 34 65H52L56 57 M76 56 80 66H96L91 53Z"/>
+      <circle fill="#082f49" cx="100" cy="35" r="7"/><circle fill="#7dd3fc" cx="100" cy="35" r="4"/>
+      <circle fill="#fff" stroke="none" cx="101" cy="33" r="1.5"/>
+      <path fill="#e0f2fe" d="M113 44 109 50 105 45Z"/>
+      <path fill="none" stroke="#67e8f9" stroke-width="2" d="m38 37 5 5 5-5m0 9 5 5 5-5m-2-12 5 5 5-5m-2 10 5 5 5-5"/><circle fill="#7dd3fc" stroke="none" cx="10" cy="65" r="2.5"/><circle fill="#bae6fd" stroke="none" cx="3" cy="71" r="1.5"/></g>`;
+const babyDragon = () => ({ defs: '', body: ORIGINAL_BABY_DRAGON });
 
 const ART: Record<string, () => { defs: string; body: string }> = {
   basic, sturdy, fire, ice, electric, metal, baby_dragon: babyDragon,
 };
 
 export function submarineSvg(id: string): string {
+  if (id === 'baby_dragon') return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="76" viewBox="0 0 128 76">${ORIGINAL_BABY_DRAGON}</svg>`;
   const art = (ART[id] ?? basic)();
   return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="76" viewBox="0 0 128 76"><defs>${art.defs}</defs><g stroke="${OUTLINE}" stroke-width="2" stroke-linejoin="round">${art.body}</g></svg>`;
 }
