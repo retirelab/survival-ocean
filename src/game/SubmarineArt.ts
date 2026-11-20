@@ -343,41 +343,26 @@ const swordCrusher = () => ({
     <path fill="#134e4a" d="M48 59 42 70H76L82 59Z"/>`,
 });
 
-/** 마스터 드래곤 잠수함: 진화한 수룡의 머리와 주황빛 균열, 뼈 뿔·가시·날개 */
-const masterDragon = () => ({
-  defs: `${vertical('hull', [[0, '#5eead4'], [0.4, '#0f766e'], [1, '#042f2e']])}
-    ${vertical('belly', [[0, '#a7f3d0'], [1, '#047857']])}
-    ${vertical('wing', [[0, '#115e59'], [1, '#042f2e']])}
-    <pattern id="scales" width="7" height="6" patternUnits="userSpaceOnUse"><path d="M0 6Q3.5 0 7 6" fill="none" stroke="#022c22" stroke-width="1.1" opacity="0.55"/></pattern>`,
-  body: `
-    <path fill="url(#hull)" d="M30 46Q12 56 6 44Q2 34 10 28L16 34Q10 40 16 44Q22 46 30 40Z"/>
-    <g fill="#f8fafc" stroke="#0b1324" stroke-width="1">
-      <path d="M8 30 2 22 12 28Z"/><path d="M6 44 0 48 8 48Z"/><path d="M14 50 10 58 18 52Z"/>
-    </g>
-    <path fill="url(#wing)" d="M40 32Q30 8 46 2Q48 14 54 12Q56 4 66 4Q64 18 70 30Z"/>
-    <path fill="none" stroke="#d6d3d1" stroke-width="2" d="M46 4 50 30M64 6 62 30"/>
-    <ellipse fill="url(#hull)" cx="58" cy="44" rx="32" ry="17"/>
-    <ellipse fill="url(#scales)" stroke="none" cx="56" cy="40" rx="27" ry="12"/>
-    <path fill="url(#belly)" d="M36 50Q58 62 86 50Q82 61 58 61Q40 61 36 50Z"/>
-    <g fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round">
-      <path d="M40 36 46 40 44 46"/><path d="M60 32 64 38 60 44 66 48"/><path d="M76 36 72 42 78 46"/>
-      <animate attributeName="opacity" values="1;0.45;1" dur="1.2s" repeatCount="indefinite"/>
-    </g>
-    <g fill="#fb923c" stroke="#7c2d12" stroke-width="1">
-      <path d="M42 28 46 18 50 28Z"/><path d="M52 27 57 16 61 27Z"/><path d="M63 27 68 18 72 28Z"/>
-    </g>
-    <path fill="url(#hull)" d="M80 30Q90 16 108 20L124 32Q128 38 122 44L106 50Q92 52 82 46Z"/>
-    <path fill="#7f1d1d" d="M108 44 124 40 122 46 108 49Z"/>
-    <g fill="#f5f5f4" stroke="none"><path d="M112 44 113 47 114 44Z"/><path d="M117 43 118 46 119 43Z"/></g>
-    <g fill="#d6d3d1" stroke="#0b1324" stroke-width="1.2">
-      <path d="M90 24 80 4 96 20Z"/><path d="M100 21 102 2 108 22Z"/><path d="M86 30 74 22 84 34Z"/>
-    </g>
-    <circle fill="#fbbf24" stroke="#0b1324" cx="106" cy="30" r="3.6"><animate attributeName="fill" values="#fbbf24;#f97316;#fbbf24" dur="1.4s" repeatCount="indefinite"/></circle>
-    <circle fill="#0b1324" stroke="none" cx="107" cy="30" r="1.3"/>
-    <path fill="#0f766e" d="M44 58 38 70H56L58 60Z M72 60 76 70H92L86 56Z"/>
-    ${flicker(`<path fill="#22d3ee" stroke="none" opacity="0.8" d="M124 36 128 34 128 44 124 42Z"/>`, 0, 0.8, 0.3)}
-    ${sparkle(48, 22, 2.5, '#fed7aa', 0.4, 1.8)}${sparkle(70, 52, 2.5, '#fed7aa', 1.2, 1.8)}`,
-});
+/**
+ * 마스터 드래곤 잠수함: 아기 드래곤 잠수함과 같은 그림체(같은 몸 구조·테두리)로 그린 진화형.
+ * 짙은 청록 몸에 주황 날개·균열, 뼈 뿔 세 개, 하얀 꼬리가시, 빛나는 주황 눈.
+ */
+const MASTER_DRAGON = `<g stroke="#082f49" stroke-width="2.2" stroke-linejoin="round"><path fill="#0f766e" stroke="#042f2e" d="M42 40Q10 54 7 24L22 34 15 16 37 30Z"/>
+      <path fill="#f8fafc" stroke="#082f49" stroke-width="1.4" d="M9 24 3 17 12 22Z M14 32 6 30 13 35Z M19 39 12 42 20 41Z"/>
+      <path fill="#fb923c" stroke="#7c2d12" d="M37 34 30 6 50 19 64 3 69 33Z"/>
+      <path fill="none" stroke="#fed7aa" stroke-width="1.5" d="M36 30 34 12M50 22 51 30M62 9 64 30"/>
+      <ellipse fill="#0d9488" cx="64" cy="44" rx="35" ry="20"/>
+      <path fill="#a7f3d0" stroke="#047857" d="M52 48Q63 42 77 48L77 61Q63 68 52 59Z"/>
+      <path fill="none" stroke="#fb923c" stroke-width="2.2" stroke-linecap="round" d="M45 36 50 41 47 47M88 34 84 40 89 45"><animate attributeName="opacity" values="1;0.45;1" dur="1.2s" repeatCount="indefinite"/></path>
+      <path fill="#14b8a6" stroke="#075985" d="M72 29Q82 14 103 23L118 38 114 50 93 54 80 47Z"/>
+      <path fill="#fef3c7" stroke="#a8a29e" d="M82 25 76 4 91 23 M95 23 98 3 104 25 M106 27 116 12 112 31"/>
+      <path fill="#0f766e" d="M38 55 34 65H52L56 57 M76 56 80 66H96L91 53Z"/>
+      <circle fill="#082f49" cx="100" cy="35" r="7"/><circle fill="#fb923c" cx="100" cy="35" r="4"><animate attributeName="fill" values="#fb923c;#fde047;#fb923c" dur="1.4s" repeatCount="indefinite"/></circle>
+      <circle fill="#fff" stroke="none" cx="101" cy="33" r="1.5"/>
+      <path fill="#e0f2fe" d="M113 44 109 50 105 45Z M107 47 104 52 101 48Z"/>
+      <path fill="none" stroke="#fdba74" stroke-width="2" d="m38 37 5 5 5-5m0 9 5 5 5-5m-2-12 5 5 5-5m-2 10 5 5 5-5"/>
+      <circle fill="#fdba74" stroke="none" cx="10" cy="65" r="2.5"/><circle fill="#7dd3fc" stroke="none" cx="3" cy="71" r="1.5"/><circle fill="#fed7aa" stroke="none" cx="18" cy="70" r="1.8"/></g>`;
+const masterDragon = () => ({ defs: '', body: MASTER_DRAGON });
 
 const ART: Record<string, () => { defs: string; body: string }> = {
   basic, sturdy, fire, ice, electric, metal, baby_dragon: babyDragon,
@@ -387,6 +372,7 @@ const ART: Record<string, () => { defs: string; body: string }> = {
 
 export function submarineSvg(id: string): string {
   if (id === 'baby_dragon') return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="76" viewBox="0 0 128 76">${ORIGINAL_BABY_DRAGON}</svg>`;
+  if (id === 'master_dragon') return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="76" viewBox="0 0 128 76">${MASTER_DRAGON}</svg>`;
   const art = (ART[id] ?? basic)();
   return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="76" viewBox="0 0 128 76"><defs>${art.defs}</defs><g stroke="${OUTLINE}" stroke-width="2" stroke-linejoin="round">${art.body}</g></svg>`;
 }
