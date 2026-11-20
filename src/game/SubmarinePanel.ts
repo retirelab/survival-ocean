@@ -1,4 +1,4 @@
-import { SUBMARINES, getSubmarine, submarineImage, missingMaterials, repairSeconds, MATERIALS, type Resources, type FleetState } from './Submarines.js';
+import { getSubmarine, submarineImage, missingMaterials, repairSeconds, MATERIALS, BASE_MINERALS, gradeLabel, shopSubmarines, type Resources, type FleetState } from './Submarines.js';
 
 export class SubmarinePanel {
   private root = document.createElement('div');
@@ -18,6 +18,7 @@ export class SubmarinePanel {
   private resources: Resources;
   private oldTouchAction = { body: '', html: '' };
   private state: FleetState;
+  private glacialVisited = false;
   private onKey = (event: KeyboardEvent) => {
     if (!this.open) return;
     if (event.code === 'Escape') { event.preventDefault(); this.close(); }
@@ -74,6 +75,12 @@ export class SubmarinePanel {
     this.update(state, resources); this.setActive(false);
   }
   setActive(active: boolean) { this.root.hidden = !active; }
+  /** 빙하수 골짜기에 처음 들어가면 특별 잠수함 7종이 상점에 나타납니다. */
+  setGlacialVisited(visited: boolean) {
+    if (visited === this.glacialVisited) return;
+    this.glacialVisited = visited;
+    if (this.open) this.renderItems();
+  }
   update(state: FleetState, resources: Resources) {
     this.state = state;
     this.resources = resources;
@@ -82,9 +89,10 @@ export class SubmarinePanel {
     this.signature = signature;
     const sub = getSubmarine(state.equipped);
     this.preview.src = submarineImage(sub); this.preview.alt = sub.name;
-    this.grade.textContent = `${sub.grade}등급`; this.grade.style.color = sub.color;
+    this.grade.textContent = gradeLabel(sub); this.grade.style.color = sub.color;
     this.name.textContent = sub.name;
-    this.balance.textContent = '보유 재료\n' + MATERIALS.map(name => `${name} ${resources[name]}개`).join(' · ');
+    const shown = MATERIALS.filter(name => (BASE_MINERALS as readonly string[]).includes(name) || resources[name] > 0);
+    this.balance.textContent = '보유 재료\n' + shown.map(name => `${name} ${resources[name]}개`).join(' · ');
     if (this.open) this.renderItems();
   }
   private show() {
@@ -97,10 +105,10 @@ export class SubmarinePanel {
   }
   private renderItems() {
     this.list.replaceChildren();
-    for (const sub of SUBMARINES) {
+    for (const sub of shopSubmarines(this.glacialVisited)) {
       const item = document.createElement('div'); item.className = 'ocean-shop-item';
       const image = document.createElement('img'); image.src = submarineImage(sub); image.alt = sub.name;
-      const grade = document.createElement('div'); grade.textContent = `${sub.grade}등급`; grade.style.color = sub.color;
+      const grade = document.createElement('div'); grade.textContent = gradeLabel(sub); grade.style.color = sub.color;
       const name = document.createElement('h3'); name.textContent = sub.name;
       const stats = document.createElement('p'); stats.textContent = sub.description;
       const ability = document.createElement('p'); ability.textContent = sub.ability; ability.style.color = '#7dd3fc';

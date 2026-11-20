@@ -6,8 +6,15 @@ const recipes = [
   ['basic', 5, {}], ['sturdy', 4, { 부싯돌: 10 }], ['fire', 3, { 루비: 5, 부싯돌: 10 }],
   ['ice', 3, { 사파이어: 5, 부싯돌: 10 }], ['electric', 3, { 토파즈: 6, 부싯돌: 10 }],
   ['metal', 2, { 다이아몬드: 7 }], ['baby_dragon', 1, { '수룡의 머리뼈': 1, '수룡의 비늘': 2 }],
+  ['hi_metal', 0, { 그라시스메탈: 2, 다이아몬드: 5 }],
+  ['rainbow', 0, { 레인보우크리스탈: 2, 루비: 1, 사파이어: 1, 토파즈: 1 }],
+  ['mega_volcano', 0, { '슈퍼 루비': 2, 루비: 4 }],
+  ['mega_blizzard', 0, { '슈퍼 사파이어': 2, 사파이어: 4 }],
+  ['mega_voltage', 0, { '슈퍼 토파즈': 2, 토파즈: 4 }],
+  ['sword_crusher', 0, { '헬리코프리온의 아래턱': 1, '헬리코프리온의 비늘': 1, 다이아몬드: 4, 그라시스메탈: 1 }],
+  ['master_dragon', 0, { '수룡의 역광비늘': 1, '수룡의 불멸의 꼬리가시': 1, '수룡의 퇴화된 날개': 2, '수룡의 머리뼈+': 1 }],
 ];
-test('seven vehicle grades and recipes match the specified requirements', () => {
+test('all fourteen vehicles have the specified grades and recipes', () => {
   assert.deepEqual(SUBMARINES.map(sub => [sub.id, sub.grade, sub.recipe]), recipes);
   assert.deepEqual(newFleet(), { owned: ['basic'], equipped: 'basic' });
 });
@@ -57,9 +64,9 @@ test('unknown fleet IDs, unowned equipment and invalid resource quantities are r
   assert.equal(isFleetState(newFleet()), true);
   for (const count of [-1, NaN, 2.5]) assert.ok(craftOrEquip(newFleet(), { ...emptyResources(), 부싯돌: count }, 'sturdy').error);
 });
-test('all seven vehicles have distinct self-contained vector artwork', () => {
+test('every vehicle has distinct self-contained vector artwork', () => {
   const drawings = SUBMARINES.map(submarineImage);
-  assert.equal(new Set(drawings).size, 7);
+  assert.equal(new Set(drawings).size, SUBMARINES.length);
   for (const image of drawings) {
     assert.match(image, /^data:image\/svg\+xml;base64,/);
     assert.match(Buffer.from(image.split(',')[1], 'base64').toString(), /viewBox="0 0 128 76"/);

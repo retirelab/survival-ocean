@@ -496,6 +496,11 @@ export class HelicoprionBoss {
 
   private showLoot(reward: string) {
     const p = this.host.player();
+    if (reward === '헬리코프리온의 아래턱' && this.scene.textures.exists('loot-helicoprion-jaw')) {
+      const icon = this.scene.add.image(p.x, p.y - 45, 'loot-helicoprion-jaw').setDisplaySize(64, 64).setDepth(45);
+      this.scene.tweens.add({ targets: icon, y: icon.y - 55, alpha: 0, duration: 1300, ease: 'Cubic.easeOut', onComplete: () => icon.destroy() });
+      return;
+    }
     const text = this.scene.add.text(p.x, p.y - 45, `${LOOT_ICONS[reward] ?? '🎁'} ${reward}`, {
       fontSize: '16px', color: '#ffffff', fontStyle: 'bold', backgroundColor: 'rgba(2, 6, 23, 0.82)', padding: { x: 6, y: 3 },
     }).setOrigin(0.5).setDepth(45);

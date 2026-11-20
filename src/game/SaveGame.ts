@@ -1,4 +1,4 @@
-import { normalizeFleet, type FleetState } from './Submarines.js';
+import { normalizeFleet, BASE_MINERALS, RARE_MINERALS, type FleetState } from './Submarines.js';
 import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
 import { isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 
@@ -9,6 +9,8 @@ export const BASE_MAX_LEVEL = 20;
 export const EXPANDED_MAX_LEVEL = 40;
 /** 강화 메뉴 단계(기본~GOLD)와 수룡 구역 번호. 강화 단계는 0~3까지만 존재합니다. */
 const MAX_UPGRADE_STAGE = 3;
+/** 광석바위: 중심층 4개 + 지하세계 2층 4개 */
+export const ORE_IDS = ['upper', 'lower', 'upper_left', 'lower_right', 'uw2_a', 'uw2_b', 'uw2_c', 'uw2_d'] as const;
 
 export interface SaveProgress {
   /** 빙하수 골짜기 진입으로 최대 레벨이 40으로 확장되었는지 */
@@ -66,15 +68,17 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
   return number(p.x, 0, 1) && number(p.y, 0, 1) && (p.facing === 1 || p.facing === -1) && number(p.hp, 1, 250) &&
     strings(value.bag, 12) && strings(value.dragonLoot, 100000) &&
-    ['다이아몬드', '루비', '사파이어', '토파즈', '부싯돌'].every(key => integer(minerals[key], 0, 1e9)) &&
+    BASE_MINERALS.every(key => integer(minerals[key], 0, 1e9)) &&
+    // 희귀 광물은 예전 저장에 없을 수 있습니다.
+    RARE_MINERALS.every(key => minerals[key] === undefined || integer(minerals[key], 0, 1e9)) &&
     ['rapid', 'defense', 'attack'].every(key => integer(u[key], 0, 4)) &&
     Array.isArray(value.completedStages) && value.completedStages.length <= 4 && value.completedStages.every(v => integer(v, 0, MAX_UPGRADE_STAGE)) &&
     ['attack', 'defense', 'rapid', 'bulletSpeed'].every(key => number(s[key], 0.1, 100)) &&
     typeof s.autoFire === 'boolean' && number(s.regenAmount, 0, 10) && number(s.regenInterval, 0, 20) && number(s.regenTimer, -1, 20) &&
     ['sleeping', 'awake', 'dead', 'respawning'].includes(d.state as string) && number(d.hp, 0, 1250) &&
     integer(d.harvests, 0, 3) && number(d.respawn, 0, 300) && number(d.cooldown, -1, 30) &&
-    Array.isArray(value.ores) && value.ores.length <= 4 && new Set(value.ores.map(ore => object(ore) ? ore.id : null)).size === value.ores.length &&
-    value.ores.every(ore => object(ore) && ['upper', 'lower', 'upper_left', 'lower_right'].includes(ore.id as string) && integer(ore.remaining, 0, 5) && number(ore.respawn, 0, 60)) &&
+    Array.isArray(value.ores) && value.ores.length <= ORE_IDS.length && new Set(value.ores.map(ore => object(ore) ? ore.id : null)).size === value.ores.length &&
+    value.ores.every(ore => object(ore) && (ORE_IDS as readonly string[]).includes(ore.id as string) && integer(ore.remaining, 0, 5) && number(ore.respawn, 0, 60)) &&
     integer(m.stage, 0, MAX_UPGRADE_STAGE) && typeof m.upgrading === 'boolean' &&
     (m.nextZone === null || integer(m.nextZone, 0, MAX_ZONE_INDEX)) && number(m.spawnY, 0, 1);
 }

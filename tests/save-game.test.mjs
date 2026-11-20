@@ -194,3 +194,14 @@ test('the hydrothermal dragon fight state is saved and validated', () => {
   assert.deepEqual(readSave().data, data);
   assert.equal(writeSave({ ...data, abyssDragon: { state: 'evolved', hp: 5000, harvests: 0, respawn: 0 } }), false);
 });
+
+test('rare minerals and the underworld 2F ore rocks are saved; older saves without them still load', () => {
+  const data = { ...sample(), zoneIndex: 5, level: 30, progress: { maxLevelExpanded: true, dragonPassUnlocked: true },
+    minerals: { ...sample().minerals, 그라시스메탈: 2, 레인보우크리스탈: 1, '슈퍼 루비': 0, '슈퍼 사파이어': 3, '슈퍼 토파즈': 1 },
+    ores: [{ id: 'upper', remaining: 5, respawn: 0 }, { id: 'uw2_a', remaining: 2, respawn: 0 }, { id: 'uw2_d', remaining: 0, respawn: 30 }] };
+  assert.equal(writeSave(data), true);
+  assert.deepEqual(readSave().data, data);
+  assert.equal(writeSave({ ...data, minerals: { ...data.minerals, 그라시스메탈: -1 } }), false);
+  assert.equal(writeSave({ ...data, ores: [{ id: 'uw2_z', remaining: 1, respawn: 0 }] }), false);
+  assert.equal(writeSave(sample()), true);
+});

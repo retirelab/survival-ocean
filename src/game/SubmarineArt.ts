@@ -191,8 +191,198 @@ const ORIGINAL_BABY_DRAGON = `<g stroke="#082f49" stroke-width="2.2" stroke-line
       <path fill="none" stroke="#67e8f9" stroke-width="2" d="m38 37 5 5 5-5m0 9 5 5 5-5m-2-12 5 5 5-5m-2 10 5 5 5-5"/><circle fill="#7dd3fc" stroke="none" cx="10" cy="65" r="2.5"/><circle fill="#bae6fd" stroke="none" cx="3" cy="71" r="1.5"/></g>`;
 const babyDragon = () => ({ defs: '', body: ORIGINAL_BABY_DRAGON });
 
+
+/** 하이메탈 잠수함: 얼음빛 그라시스메탈 결정과 두꺼운 장갑, 초록 레이저 포신 */
+const hiMetal = () => ({
+  defs: `${vertical('hull', [[0, '#f8fafc'], [0.25, '#cbd5e1'], [0.5, '#64748b'], [0.62, '#e2e8f0'], [1, '#334155']])}
+    ${vertical('glacis', [[0, '#e0f2fe'], [0.5, '#38bdf8'], [1, '#1d4ed8']])}
+    <radialGradient id="laser" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#f0fdf4"/><stop offset="0.45" stop-color="#4ade80"/><stop offset="1" stop-color="#16a34a" stop-opacity="0"/></radialGradient>
+    ${glassGradient('#dcfce7', '#166534')}`,
+  body: `
+    <path fill="#475569" d="M22 30 4 18 8 40 4 62 22 52Z"/><path fill="#94a3b8" stroke="none" d="M8 22 18 32 10 38Z"/>
+    <g stroke="#0c4a6e" stroke-width="1.2">
+      <path fill="url(#glacis)" d="M40 22 44 2 50 20Z"/><path fill="url(#glacis)" d="M48 21 56 0 60 19Z"/>
+      <path fill="url(#glacis)" d="M58 20 70 4 70 20Z"/><path fill="url(#glacis)" d="M34 25 32 10 42 23Z"/>
+      <path fill="#e0f2fe" stroke="none" opacity="0.8" d="M44 6 46 18M56 4 57 17M68 8 67 18"/>
+    </g>
+    <path fill="url(#hull)" d="M20 40 28 24 46 19H92L108 26 108 54 92 61H46L28 56Z"/>
+    <g fill="#475569" stroke="#1e293b" stroke-width="1.2">
+      <rect x="34" y="27" width="20" height="11" rx="2"/><rect x="58" y="27" width="20" height="11" rx="2"/>
+      <rect x="34" y="42" width="20" height="11" rx="2"/><rect x="58" y="42" width="20" height="11" rx="2"/>
+    </g>
+    <g fill="#e2e8f0" stroke="none">${[37, 51, 61, 75].map(x => `<circle cx="${x}" cy="30" r="1.3"/><circle cx="${x}" cy="50" r="1.3"/>`).join('')}</g>
+    <path fill="none" stroke="#4ade80" stroke-width="2" opacity="0.9" d="M30 40H104"><animate attributeName="opacity" values="0.9;0.3;0.9" dur="1.2s" repeatCount="indefinite"/></path>
+    <rect fill="#334155" x="104" y="34" width="20" height="12" rx="3"/>
+    <rect fill="#16a34a" x="108" y="37" width="16" height="6" rx="2"/>
+    <circle fill="url(#laser)" stroke="none" cx="124" cy="40" r="7"><animate attributeName="r" values="7;10;7" dur="0.8s" repeatCount="indefinite"/></circle>
+    <rect fill="#1e293b" x="84" y="25" width="16" height="12" rx="3"/>
+    <rect fill="url(#glass)" x="86" y="27" width="12" height="8" rx="2"/>
+    <path fill="#64748b" d="M50 60 44 71H80L86 60Z"/>
+    ${sparkle(46, 6, 3, '#ffffff', 0.2, 1.8)}${sparkle(66, 10, 2.5, '#ffffff', 1, 1.8)}`,
+});
+
+/** 무지개빛 잠수함: 일곱 빛깔 프리즘 선체와 무지개 결정 지느러미 */
+const rainbow = () => ({
+  defs: `<linearGradient id="hull" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f87171"/><stop offset="0.18" stop-color="#fb923c"/><stop offset="0.34" stop-color="#facc15"/>
+      <stop offset="0.5" stop-color="#4ade80"/><stop offset="0.66" stop-color="#38bdf8"/><stop offset="0.82" stop-color="#818cf8"/><stop offset="1" stop-color="#e879f9"/>
+      <animateTransform attributeName="gradientTransform" type="translate" values="0 0;0.3 0;0 0" dur="3s" repeatCount="indefinite"/></linearGradient>
+    ${vertical('shine', [[0, '#ffffff'], [0.5, '#ffffff'], [1, '#ffffff']])}
+    ${glassGradient('#fdf4ff', '#7e22ce')}`,
+  body: `
+    <path fill="#c084fc" d="M24 32 6 18 10 40 6 62 24 50Z"/>
+    <g stroke="#3b0764" stroke-width="1.2">
+      <path fill="#f87171" d="M40 24 38 6 46 22Z"/><path fill="#fb923c" d="M47 22 50 2 54 21Z"/><path fill="#facc15" d="M55 21 60 0 62 20Z"/>
+      <path fill="#4ade80" d="M63 20 70 3 70 21Z"/><path fill="#38bdf8" d="M71 21 80 7 78 22Z"/><path fill="#a78bfa" d="M79 22 88 12 85 24Z"/>
+    </g>
+    <path fill="url(#hull)" d="M22 40Q26 22 60 20Q98 18 118 36L122 42 114 52Q96 62 60 62Q26 60 22 40Z"/>
+    <path fill="#ffffff" stroke="none" opacity="0.35" d="M30 32Q62 22 104 28L104 33Q62 28 32 37Z"/>
+    <g stroke="none" opacity="0.8">${['#f87171', '#facc15', '#4ade80', '#38bdf8', '#c084fc'].map((c, i) => `<circle fill="${c}" cx="${38 + i * 12}" cy="50" r="3.2"/>`).join('')}</g>
+    <path fill="#a855f7" d="M60 61 56 71H84L88 59Z"/>
+    ${porthole(102, 38, 8, '#7e22ce', '#f5d0fe')}
+    ${sparkle(46, 28, 3.5, '#ffffff', 0, 1.4)}${sparkle(84, 46, 3, '#ffffff', 0.5, 1.4)}${sparkle(30, 46, 2.5, '#ffffff', 0.9, 1.4)}`,
+});
+
+/** 메가 볼케이노 잠수함: 용암 균열이 흐르는 현무암 선체와 분화구 포탑, 화염방사 노즐 */
+const megaVolcano = () => ({
+  defs: `${vertical('hull', [[0, '#57534e'], [0.5, '#292524'], [1, '#0c0a09']])}
+    ${vertical('lava', [[0, '#fef08a'], [0.5, '#f97316'], [1, '#b91c1c']])}
+    <radialGradient id="ruby" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#fff1f2"/><stop offset="0.35" stop-color="#f43f5e"/><stop offset="1" stop-color="#881337"/></radialGradient>
+    ${glassGradient('#fed7aa', '#7c2d12')}`,
+  body: `
+    <path fill="#44403c" d="M24 32 6 18 10 40 6 62 24 50Z"/>
+    <path fill="#44403c" d="M44 22 38 13H76L70 22Z"/>
+    ${flicker(`<path fill="#f97316" stroke="none" d="M48 13Q46 5 51 1Q53 7 57 6Q58 0 63 -1Q64 6 66 13Z"/><circle fill="#fde047" stroke="none" cx="57" cy="7" r="2.6"/>`, 0, 0.6, 0.45)}
+    <ellipse fill="#7f1d1d" cx="57" cy="13" rx="18" ry="4"/>
+    <ellipse fill="url(#lava)" stroke="none" cx="57" cy="13" rx="14" ry="2.6"/>
+    <path fill="url(#hull)" d="M22 40Q24 22 56 20H96L114 30 116 50 96 60H56Q24 58 22 40Z"/>
+    <g fill="none" stroke="url(#lava)" stroke-width="2.4" stroke-linecap="round">
+      <path d="M30 34 38 38 34 46 42 50"/><path d="M50 26 54 34 50 40 58 46 54 56"/><path d="M80 24 76 32 84 38 80 48 86 56"/>
+      <animate attributeName="opacity" values="1;0.5;1" dur="1.4s" repeatCount="indefinite"/>
+    </g>
+    <path fill="url(#ruby)" d="M60 40 66 30H76L82 40 71 52Z"/>
+    <path fill="none" stroke="#ffe4e6" stroke-width="1" d="M60 40H82M66 30 71 40 76 30M71 40V52"/>
+    <path fill="#57534e" d="M112 32H124L126 36 126 44 124 48H112Z"/>
+    <path fill="#1c1917" d="M122 35H127V45H122Z"/>
+    ${flicker(`<path fill="#f97316" stroke="none" d="M127 36Q134 40 127 44Z"/>`, 0.1, 0.4, 0.2)}
+    <path fill="#44403c" d="M56 59 50 70H82L88 58Z"/>
+    ${porthole(98, 38, 7, '#7f1d1d', '#fdba74')}`,
+});
+
+/** 메가 블리자드 잠수함: 하얀 서리 선체와 칼날 같은 얼음 지느러미, 눈보라 */
+const megaBlizzard = () => ({
+  defs: `${vertical('hull', [[0, '#ffffff'], [0.45, '#bae6fd'], [1, '#1e3a8a']])}
+    ${vertical('blade', [[0, '#ffffff'], [0.5, '#7dd3fc'], [1, '#2563eb']])}
+    ${glassGradient('#e0f2fe', '#1e40af')}`,
+  body: `
+    <path fill="url(#blade)" d="M26 36 0 20 18 40 0 60 26 46Z"/>
+    <path fill="url(#blade)" d="M44 24 30 -2 58 22Z"/><path fill="url(#blade)" d="M62 21 64 -4 76 21Z"/>
+    <path fill="url(#blade)" d="M48 58 34 78 62 60Z"/><path fill="url(#blade)" d="M74 60 82 76 86 58Z"/>
+    <path fill="#ffffff" stroke="none" opacity="0.8" d="M34 2 50 22M64 0 70 20"/>
+    <path fill="url(#hull)" d="M22 40 32 26 56 20H94L114 30 124 40 114 50 94 60H56L32 54Z"/>
+    <path fill="url(#blade)" d="M110 32 128 40 110 48Z"/>
+    <g fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round">
+      <path d="M58 32V50M49 41H67M52 35 64 47M64 35 52 47"/>
+      <animateTransform attributeName="transform" type="rotate" values="0 58 41;360 58 41" dur="6s" repeatCount="indefinite"/>
+    </g>
+    <g fill="none" stroke="#e0f2fe" stroke-width="1.2" stroke-linecap="round" opacity="0.8">
+      <path d="M30 30Q38 26 44 30"/><path d="M30 50Q38 54 44 50"/>
+    </g>
+    ${porthole(98, 38, 8, '#1e40af', '#bfdbfe')}
+    ${[[20, 14, 0], [8, 70, 0.6], [112, 10, 1.2], [118, 66, 1.8]].map(([x, y, d]) => `<circle fill="#ffffff" stroke="none" cx="${x}" cy="${y}" r="1.8"><animate attributeName="cy" values="${y};${y + 6};${y}" dur="2.4s" begin="${d}s" repeatCount="indefinite"/></circle>`).join('')}
+    ${sparkle(40, 10, 3, '#ffffff', 0.3, 2)}${sparkle(84, 26, 2.5, '#ffffff', 1.1, 2)}`,
+});
+
+/** 메가 볼티지 잠수함: 슈퍼 토파즈 축전기와 선체를 감싼 푸른 전자기 고리 */
+const megaVoltage = () => ({
+  defs: `${vertical('hull', [[0, '#60a5fa'], [0.45, '#1d4ed8'], [1, '#0f172a']])}
+    <linearGradient id="topaz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffbeb"/><stop offset="0.4" stop-color="#facc15"/><stop offset="1" stop-color="#b45309"/></linearGradient>
+    ${glassGradient('#fef9c3', '#a16207')}`,
+  body: `
+    <path fill="#1e3a8a" d="M24 32 6 18 10 40 6 62 24 50Z"/>
+    <path fill="#1e40af" d="M50 22 54 12H72L76 22Z"/>
+    <path fill="url(#topaz)" d="M58 12 63 4 68 12Z"/>
+    ${flicker(`<path fill="none" stroke="#fef08a" stroke-width="2" stroke-linecap="round" d="M63 4 57 2 66 0 59 -2"/><path fill="none" stroke="#fef9c3" stroke-width="1.6" stroke-linecap="round" d="M68 9 76 5 74 10 82 7"/>`, 0, 0.4, 0.05)}
+    <ellipse fill="none" stroke="#38bdf8" stroke-width="4" cx="44" cy="40" rx="6" ry="24" opacity="0.85"/>
+    <path fill="url(#hull)" d="M22 40Q24 22 58 20Q98 18 118 34L122 42 114 52Q96 62 58 62Q24 60 22 40Z"/>
+    <ellipse fill="none" stroke="#7dd3fc" stroke-width="4" cx="44" cy="40" rx="6" ry="24" stroke-dasharray="20 60" opacity="0.95"><animate attributeName="stroke-dashoffset" values="0;80" dur="0.8s" repeatCount="indefinite"/></ellipse>
+    <ellipse fill="none" stroke="#7dd3fc" stroke-width="4" cx="82" cy="40" rx="6" ry="24" opacity="0.85"/>
+    <ellipse fill="none" stroke="#e0f2fe" stroke-width="2" cx="82" cy="40" rx="6" ry="24" stroke-dasharray="14 60"><animate attributeName="stroke-dashoffset" values="80;0" dur="0.8s" repeatCount="indefinite"/></ellipse>
+    <path fill="url(#topaz)" d="M54 32 63 27 72 32 73 44 63 52 53 44Z"/>
+    <path fill="none" stroke="#fffbeb" stroke-width="1" d="M54 32 63 38 72 32M53 44 63 38 73 44M63 27V52"/>
+    ${flicker(`<path fill="#fefce8" stroke="#ca8a04" stroke-width="0.8" d="M65 29 59 39H64L60 49 69 37H64Z"/>`, 0.3, 0.9, 0.4)}
+    <path fill="#1e3a8a" d="M60 60 56 70H84L88 58Z"/>
+    ${porthole(102, 37, 8, '#1e3a8a', '#fde68a')}`,
+});
+
+/** 소드 크러셔 잠수함: 헬리코프리온의 나선 톱날을 앞에 단 돌격형 선체 */
+const swordCrusher = () => ({
+  defs: `${vertical('hull', [[0, '#99f6e4'], [0.35, '#0f766e'], [1, '#042f2e']])}
+    <radialGradient id="saw" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#5eead4"/><stop offset="0.35" stop-color="#d6d3d1"/><stop offset="1" stop-color="#78716c"/></radialGradient>
+    ${glassGradient('#ccfbf1', '#134e4a')}`,
+  body: `
+    <path fill="#134e4a" d="M20 32 4 20 8 40 4 60 20 50Z"/>
+    ${flicker(`<path fill="#5eead4" stroke="none" d="M8 36 0 40 8 44Z"/>`, 0, 0.3, 0.4)}
+    <path fill="url(#hull)" d="M18 40 26 26 46 20H84L98 28 100 52 84 60H46L26 54Z"/>
+    <path fill="#115e59" d="M44 21 50 10H70L74 21Z"/>
+    <path fill="none" stroke="#5eead4" stroke-width="1.5" opacity="0.8" d="M30 40H92M40 28V54M78 26V56"/>
+    <g fill="#a5f3fc" stroke="#0e7490" stroke-width="0.8">${[48, 58, 68].map(x => `<path d="M${x} 46 ${x + 3} 49 ${x} 52 ${x - 3} 49Z"/>`).join('')}</g>
+    <rect fill="#1e293b" x="58" y="26" width="16" height="12" rx="3"/><rect fill="url(#glass)" x="60" y="28" width="12" height="8" rx="2"/>
+    <path fill="#44403c" d="M96 34H104V46H96Z"/>
+    <g>
+      <circle fill="url(#saw)" cx="110" cy="40" r="15"/>
+      <g fill="#e7e5e4" stroke="#0b1324" stroke-width="1">${Array.from({ length: 12 }, (_, i) => {
+        const a = (i / 12) * Math.PI * 2; const b = a + 0.32;
+        const p = (r: number, t: number) => `${(110 + Math.cos(t) * r).toFixed(1)} ${(40 + Math.sin(t) * r).toFixed(1)}`;
+        return `<path d="M${p(14, a)} ${p(20, a + 0.14)} ${p(14, b)}Z"/>`;
+      }).join('')}</g>
+      <path fill="none" stroke="#57534e" stroke-width="2" d="M110 40m-9 0a9 9 0 1 1 9 9a6 6 0 1 1 -3 -6"/>
+      <circle fill="#5eead4" stroke="none" cx="110" cy="40" r="2.5"/>
+      <animateTransform attributeName="transform" type="rotate" values="0 110 40;360 110 40" dur="0.6s" repeatCount="indefinite"/>
+    </g>
+    <path fill="#134e4a" d="M48 59 42 70H76L82 59Z"/>`,
+});
+
+/** 마스터 드래곤 잠수함: 진화한 수룡의 머리와 주황빛 균열, 뼈 뿔·가시·날개 */
+const masterDragon = () => ({
+  defs: `${vertical('hull', [[0, '#5eead4'], [0.4, '#0f766e'], [1, '#042f2e']])}
+    ${vertical('belly', [[0, '#a7f3d0'], [1, '#047857']])}
+    ${vertical('wing', [[0, '#115e59'], [1, '#042f2e']])}
+    <pattern id="scales" width="7" height="6" patternUnits="userSpaceOnUse"><path d="M0 6Q3.5 0 7 6" fill="none" stroke="#022c22" stroke-width="1.1" opacity="0.55"/></pattern>`,
+  body: `
+    <path fill="url(#hull)" d="M30 46Q12 56 6 44Q2 34 10 28L16 34Q10 40 16 44Q22 46 30 40Z"/>
+    <g fill="#f8fafc" stroke="#0b1324" stroke-width="1">
+      <path d="M8 30 2 22 12 28Z"/><path d="M6 44 0 48 8 48Z"/><path d="M14 50 10 58 18 52Z"/>
+    </g>
+    <path fill="url(#wing)" d="M40 32Q30 8 46 2Q48 14 54 12Q56 4 66 4Q64 18 70 30Z"/>
+    <path fill="none" stroke="#d6d3d1" stroke-width="2" d="M46 4 50 30M64 6 62 30"/>
+    <ellipse fill="url(#hull)" cx="58" cy="44" rx="32" ry="17"/>
+    <ellipse fill="url(#scales)" stroke="none" cx="56" cy="40" rx="27" ry="12"/>
+    <path fill="url(#belly)" d="M36 50Q58 62 86 50Q82 61 58 61Q40 61 36 50Z"/>
+    <g fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round">
+      <path d="M40 36 46 40 44 46"/><path d="M60 32 64 38 60 44 66 48"/><path d="M76 36 72 42 78 46"/>
+      <animate attributeName="opacity" values="1;0.45;1" dur="1.2s" repeatCount="indefinite"/>
+    </g>
+    <g fill="#fb923c" stroke="#7c2d12" stroke-width="1">
+      <path d="M42 28 46 18 50 28Z"/><path d="M52 27 57 16 61 27Z"/><path d="M63 27 68 18 72 28Z"/>
+    </g>
+    <path fill="url(#hull)" d="M80 30Q90 16 108 20L124 32Q128 38 122 44L106 50Q92 52 82 46Z"/>
+    <path fill="#7f1d1d" d="M108 44 124 40 122 46 108 49Z"/>
+    <g fill="#f5f5f4" stroke="none"><path d="M112 44 113 47 114 44Z"/><path d="M117 43 118 46 119 43Z"/></g>
+    <g fill="#d6d3d1" stroke="#0b1324" stroke-width="1.2">
+      <path d="M90 24 80 4 96 20Z"/><path d="M100 21 102 2 108 22Z"/><path d="M86 30 74 22 84 34Z"/>
+    </g>
+    <circle fill="#fbbf24" stroke="#0b1324" cx="106" cy="30" r="3.6"><animate attributeName="fill" values="#fbbf24;#f97316;#fbbf24" dur="1.4s" repeatCount="indefinite"/></circle>
+    <circle fill="#0b1324" stroke="none" cx="107" cy="30" r="1.3"/>
+    <path fill="#0f766e" d="M44 58 38 70H56L58 60Z M72 60 76 70H92L86 56Z"/>
+    ${flicker(`<path fill="#22d3ee" stroke="none" opacity="0.8" d="M124 36 128 34 128 44 124 42Z"/>`, 0, 0.8, 0.3)}
+    ${sparkle(48, 22, 2.5, '#fed7aa', 0.4, 1.8)}${sparkle(70, 52, 2.5, '#fed7aa', 1.2, 1.8)}`,
+});
+
 const ART: Record<string, () => { defs: string; body: string }> = {
   basic, sturdy, fire, ice, electric, metal, baby_dragon: babyDragon,
+  hi_metal: hiMetal, rainbow, mega_volcano: megaVolcano, mega_blizzard: megaBlizzard, mega_voltage: megaVoltage,
+  sword_crusher: swordCrusher, master_dragon: masterDragon,
 };
 
 export function submarineSvg(id: string): string {

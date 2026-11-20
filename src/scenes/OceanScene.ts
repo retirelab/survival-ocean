@@ -1,14 +1,14 @@
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
-import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
+import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, holdWeapon, shipAttack, voltChargeLevel, sawBoost, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
-import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage } from '../game/Submarines';
+import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
 import { HelicoprionBoss } from './HelicoprionBoss';
 import { AbyssDragonBoss } from './AbyssDragonBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
-import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, type SaveGame } from '../game/SaveGame';
+import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, ORE_IDS, type SaveGame } from '../game/SaveGame';
 
 const ROCK_BREAM_SPRITE =
   'data:image/png;base64,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';
@@ -63,16 +63,20 @@ interface BulletEntity {
   life: number;
   piercing: boolean;
   hitFish: Set<FishEntity>;
+  /** 무지개빛 총알: 날아가는 동안 색이 바뀜 */
+  rainbow?: boolean;
+  /** 메가 볼티지 2단계: 맞은 곳 주변 물고기에게도 피해 */
+  splash?: number;
 }
 
 type DragonState = 'sleeping' | 'awake' | 'dead' | 'respawning';
 type DragonAttack = 'breath' | 'arm' | 'tail';
 type UpgradeChoice = 'rapid' | 'defense' | 'attack' | 'skip';
 type MenuMode = 'start' | 'upgrade' | null;
-type MineralType = '다이아몬드' | '루비' | '사파이어' | '토파즈' | '부싯돌';
+type MineralType = MineralName;
 
 interface OreNode {
-  id: 'upper' | 'lower' | 'upper_left' | 'lower_right';
+  id: typeof ORE_IDS[number];
   x: number;
   y: number;
   remaining: number;
@@ -181,6 +185,29 @@ const MINERAL_TABLE: Array<{ name: MineralType; limit: number; color: number; ch
   { name: '토파즈', limit: 0.75, color: 0xf59e0b, chance: 20 },
   { name: '부싯돌', limit: 1, color: 0x374151, chance: 25 },
 ];
+/** 빙하수 골짜기에 가 본 뒤에만 나오는 희귀 광물: 한 번 캘 때 각각 1% (합계 5%) */
+const RARE_MINERAL_CHANCE = 0.01;
+const RARE_MINERAL_COLORS: Record<string, number> = {
+  그라시스메탈: 0x38bdf8, 레인보우크리스탈: 0xf0abfc, '슈퍼 루비': 0xdc2626, '슈퍼 사파이어': 0x1d4ed8, '슈퍼 토파즈': 0xeab308,
+};
+/** 광물 그림(public/assets/items). 부싯돌은 그림 없이 도형으로 표시합니다. */
+const MINERAL_ICONS: Partial<Record<MineralType, string>> = {
+  다이아몬드: 'mineral-diamond', 루비: 'mineral-ruby', 사파이어: 'mineral-sapphire', 토파즈: 'mineral-topaz',
+  그라시스메탈: 'ore-glacis-metal', 레인보우크리스탈: 'ore-rainbow-crystal', '슈퍼 루비': 'ore-super-ruby',
+  '슈퍼 사파이어': 'ore-super-sapphire', '슈퍼 토파즈': 'ore-super-topaz',
+};
+/** 구역별 광석바위 위치(화면 비율)와 HUD 이름 */
+const ORE_LAYOUT: Record<number, Partial<Record<OreNode['id'], { pos: [number, number]; label: string }>>> = {
+  1: {
+    upper: { pos: [0.76, 0.36], label: '오른쪽 위' }, lower: { pos: [0.22, 0.62], label: '왼쪽 아래' },
+    upper_left: { pos: [0.22, 0.36], label: '왼쪽 위' }, lower_right: { pos: [0.76, 0.62], label: '오른쪽 아래' },
+  },
+  5: {
+    uw2_a: { pos: [0.82, 0.24], label: '오른쪽 위' }, uw2_b: { pos: [0.16, 0.7], label: '왼쪽 아래' },
+    uw2_c: { pos: [0.46, 0.84], label: '가운데 아래' }, uw2_d: { pos: [0.5, 0.3], label: '가운데 위' },
+  },
+};
+const ORE_ZONES = Object.keys(ORE_LAYOUT).map(Number);
 const UPGRADE_TITLES = [
   { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
   { name: 'BRONZE', medal: '🥉', border: 0xb87333, text: '#fdba74' },
@@ -283,13 +310,7 @@ export class OceanScene extends Phaser.Scene {
   private mineBtnText!: Phaser.GameObjects.Text;
   private oreNodes: OreNode[] = [];
   private nearbyOre?: OreNode;
-  private mineralInventory: Record<MineralType, number> = {
-    다이아몬드: 0,
-    루비: 0,
-    사파이어: 0,
-    토파즈: 0,
-    부싯돌: 0,
-  };
+  private mineralInventory = Object.fromEntries(ALL_MINERALS.map(name => [name, 0])) as Record<MineralType, number>;
 
   private dragonState: DragonState = 'sleeping';
   private dragonHp = DRAGON_MAX_HP;
@@ -336,6 +357,14 @@ export class OceanScene extends Phaser.Scene {
   private breathGraphics!: Phaser.GameObjects.Graphics;
   private armorGraphics!: Phaser.GameObjects.Graphics;
   private breathDamageTimer = 0;
+  /** 특별 잠수함 무기 상태 */
+  private fireHeld = 0;
+  private fireWasDown = false;
+  private dashCooldown = 0;
+  private sawHitTimes = new Map<object, number>();
+  private voltCannon?: { remaining: number; tick: number };
+  private rainbowRegenTimer = COMBAT.rainbowRegenSeconds;
+  private gameClock = 0;
 
   constructor() {
     super('OceanScene');
@@ -358,6 +387,8 @@ export class OceanScene extends Phaser.Scene {
     this.load.image('water_dragon_scales', `${assetBase}/water-dragon-scales.png`);
     HelicoprionBoss.preload(this);
     AbyssDragonBoss.preload(this);
+    for (const key of new Set(Object.values(MINERAL_ICONS))) this.load.image(key, `assets/items/${key}.png`);
+    this.load.image('loot-helicoprion-jaw', 'assets/items/loot-helicoprion-jaw.png');
     for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
     for (const { key } of UNDERWORLD_2F_FISH) this.load.image(key, `assets/fish/${key}.png`);
   }
@@ -546,6 +577,7 @@ export class OceanScene extends Phaser.Scene {
       close: () => this.pauseControls?.closeOverlay(),
       select: id => this.selectSubmarine(id),
     });
+    this.submarinePanel.setGlacialVisited(this.maxLevelExpanded);
     this.breathGraphics = this.add.graphics().setDepth(8);
     this.armorGraphics = this.add.graphics().setDepth(11);
     this.createControls();
@@ -575,17 +607,19 @@ export class OceanScene extends Phaser.Scene {
 
   private selectSubmarine(id: string): string | null {
     const previous = { fleet: this.fleet, minerals: this.mineralInventory, loot: this.dragonLoot };
+    if (getSubmarine(id).glacial && !this.maxLevelExpanded) return '빙하수 골짜기에 처음 들어가면 제작할 수 있어요.';
     const result = craftOrEquip(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot), id);
     if (result.error) return result.error;
     this.fleet = result.state;
     this.mineralInventory = { ...previous.minerals };
     for (const name of Object.keys(this.mineralInventory) as MineralType[]) this.mineralInventory[name] = result.resources[name];
-    let skulls = result.resources['수룡의 머리뼈'];
-    let scales = result.resources['수룡의 비늘'];
+    // 제작에 쓴 보스 전리품만 빼고 나머지 전리품은 그대로 둡니다.
+    const keep = new Map<string, number>(LOOT_MATERIALS.map(name => [name, result.resources[name]]));
     this.dragonLoot = previous.loot.filter(name => {
-      if (name === '수룡의 머리뼈') return skulls-- > 0;
-      if (name === '수룡의 비늘') return scales-- > 0;
-      return true;
+      const left = keep.get(name);
+      if (left === undefined) return true;
+      keep.set(name, left - 1);
+      return left > 0;
     });
     const data = this.captureSave();
     if (!writeSave(data)) {
@@ -606,7 +640,13 @@ export class OceanScene extends Phaser.Scene {
     this.speed = 250 * sub.speed;
     this.submarinePanel?.update(this.fleet, inventoryResources(this.mineralInventory, this.dragonLoot));
     this.breathGraphics?.clear();
-    this.shootBtnText?.setText(this.fleet.equipped === 'baby_dragon' ? '🐉\n브레스' : '🔫\n발사');
+    const buttonText: Record<string, string> = {
+      baby_dragon: '🐉\n브레스', master_dragon: '🐲\n브레스', mega_volcano: '🔥\n화염', mega_voltage: '⚡\n차지', sword_crusher: '💨\n대시',
+    };
+    this.shootBtnText?.setText(buttonText[sub.id] ?? '🔫\n발사');
+    this.fireHeld = 0;
+    this.voltCannon = undefined;
+    this.rainbowRegenTimer = COMBAT.rainbowRegenSeconds;
     this.updateShockButton();
   }
 
@@ -659,6 +699,51 @@ export class OceanScene extends Phaser.Scene {
         fade(bubble, rand(-4, 4), -rand(18, 30), rand(700, 1000), 0.6);
         break;
       }
+      case 'hi_metal': {
+        this.auraTimer = 0.12;
+        const star = this.add.star(px + rand(-28, 28), py + rand(-16, 16), 4, 1, rand(3, 5), Phaser.Utils.Array.GetRandom([0x4ade80, 0xbae6fd, 0xffffff])).setScale(0.2).setDepth(11);
+        this.tweens.add({ targets: star, scale: 1, angle: 45, duration: 200, yoyo: true, onComplete: () => star.destroy() });
+        break;
+      }
+      case 'rainbow': {
+        this.auraTimer = 0.07;
+        const color = Phaser.Display.Color.HSVToRGB(Math.random(), 0.7, 1).color as number;
+        const star = this.add.star(px + back * rand(20, 34) + rand(-6, 6), py + rand(-14, 14), 4, 1, rand(3, 5.5), color).setScale(0.3);
+        fade(star as unknown as Phaser.GameObjects.Shape, back * rand(10, 22), rand(-8, 8), 500, 1.1);
+        break;
+      }
+      case 'mega_volcano': {
+        this.auraTimer = 0.04;
+        const ember = this.add.circle(px + back * rand(26, 34), py + rand(-5, 5), rand(3, 5.5), Phaser.Utils.Array.GetRandom([0xfde047, 0xf97316, 0xdc2626, 0x57534e]));
+        fade(ember, back * rand(16, 34), rand(-20, -6), rand(360, 600), 0.3);
+        break;
+      }
+      case 'mega_blizzard': {
+        this.auraTimer = 0.07;
+        const flake = this.add.text(px + rand(-34, 34), py + rand(-22, 22), Phaser.Utils.Array.GetRandom(['*', '❄']), { fontSize: `${Math.round(rand(10, 16))}px`, color: '#f0f9ff' }).setOrigin(0.5);
+        fade(flake, back * rand(14, 30), rand(-6, 14), rand(600, 900), 0.6);
+        break;
+      }
+      case 'mega_voltage': {
+        this.auraTimer = 0.1;
+        const angle = rand(0, Math.PI * 2);
+        const spark = this.add.line(0, 0, 0, 0, rand(7, 12), 0, Phaser.Utils.Array.GetRandom([0xfef08a, 0x7dd3fc])).setLineWidth(2).setOrigin(0, 0.5)
+          .setPosition(px + Math.cos(angle) * 26, py + Math.sin(angle) * 18).setRotation(angle);
+        fade(spark, Math.cos(angle) * 10, Math.sin(angle) * 10, 160);
+        break;
+      }
+      case 'sword_crusher': {
+        this.auraTimer = 0.08;
+        const spark = this.add.circle(px + this.facing * 34 + rand(-6, 6), py + rand(-10, 10), rand(1.5, 3), Phaser.Utils.Array.GetRandom([0x5eead4, 0xfef9c3, 0xffffff]));
+        fade(spark, this.facing * rand(4, 14), rand(-12, 12), 260);
+        break;
+      }
+      case 'master_dragon': {
+        this.auraTimer = 0.08;
+        const ember = this.add.circle(px + rand(-26, 26), py + rand(-14, 6), rand(2, 3.5), Phaser.Utils.Array.GetRandom([0xfb923c, 0x5eead4, 0xfde68a]));
+        fade(ember, rand(-6, 6), -rand(16, 28), rand(600, 900), 0.4);
+        break;
+      }
       case 'sturdy': {
         this.auraTimer = 0.22;
         const grit = this.add.rectangle(px + back * rand(26, 32), py + rand(4, 12), 3, 3, 0x71717a).setAngle(rand(0, 90));
@@ -685,6 +770,9 @@ export class OceanScene extends Phaser.Scene {
     this.aimLockedUntilRelease = false;
     this.setAiming(false);
     this.breathGraphics?.clear();
+    this.fireHeld = 0;
+    this.fireWasDown = false;
+    this.voltCannon = undefined;
   }
 
   private captureSave(): SaveGame {
@@ -726,11 +814,12 @@ export class OceanScene extends Phaser.Scene {
     this.maxLevelExpanded = progress.maxLevelExpanded;
     this.maxLevel = progress.maxLevelExpanded ? EXPANDED_MAX_LEVEL : BASE_MAX_LEVEL;
     this.dragonPassUnlocked = progress.dragonPassUnlocked;
+    this.submarinePanel?.setGlacialVisited(this.maxLevelExpanded);
     this.level = save.level;
     this.playerHp = save.player.hp;
     this.bag = [...save.bag];
     this.dragonLoot = [...save.dragonLoot];
-    for (const mineral of MINERAL_TABLE) this.mineralInventory[mineral.name] = save.minerals[mineral.name];
+    for (const name of ALL_MINERALS) this.mineralInventory[name] = save.minerals[name] ?? 0;
     this.upgradeRanks = { ...save.upgrades };
     this.completedUpgradeStages = new Set(save.completedStages);
     const stats = save.stats;
@@ -1930,7 +2019,7 @@ export class OceanScene extends Phaser.Scene {
       this.layoutOreNodes(width, height);
       this.drawRockShelf(width * 0.56, height * 0.16, width * 0.48, height * 0.2, false);
       this.drawRockShelf(-width * 0.04, height * 0.66, width * 0.46, height * 0.19, true);
-      for (const ore of this.oreNodes) this.drawOreNode(ore);
+      for (const ore of this.zoneOres()) this.drawOreNode(ore);
     } else if (this.zoneIndex === 2) {
       this.decoGraphics.fillStyle(zone.floorColor, 0.95);
       this.decoGraphics.fillRect(0, height - 20, width, 20);
@@ -1943,6 +2032,9 @@ export class OceanScene extends Phaser.Scene {
       this.drawGlacialValley(width, height);
     } else if (this.zoneIndex === 5) {
       this.drawUnderworldSecondFloor(width, height);
+      this.ensureOreNodes();
+      this.layoutOreNodes(width, height);
+      for (const ore of this.zoneOres()) this.drawOreNode(ore);
     } else if (this.zoneIndex === 6) {
       this.drawHydrothermalVents(width, height);
     } else if (this.zoneIndex === NEST_ZONE_INDEX) {
@@ -2031,8 +2123,7 @@ export class OceanScene extends Phaser.Scene {
 
   private ensureOreNodes() {
     // 예전 저장의 채굴 횟수와 재생 시간은 유지하고 없는 바위만 추가합니다.
-    const ids: OreNode['id'][] = ['upper', 'lower', 'upper_left', 'lower_right'];
-    for (const id of ids) {
+    for (const id of ORE_IDS) {
       if (!this.oreNodes.some(ore => ore.id === id)) {
         this.oreNodes.push({ id, x: 0, y: 0, remaining: ORE_MINES_PER_NODE, respawnRemaining: 0 });
       }
@@ -2040,15 +2131,19 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private layoutOreNodes(width: number, height: number) {
-    const positions: Record<OreNode['id'], [number, number]> = {
-      upper: [0.76, 0.36], lower: [0.22, 0.62],
-      upper_left: [0.22, 0.36], lower_right: [0.76, 0.62],
-    };
     for (const ore of this.oreNodes) {
-      const [x, y] = positions[ore.id];
-      ore.x = width * x;
-      ore.y = height * y;
+      const zone = ORE_ZONES.find(z => ORE_LAYOUT[z][ore.id]);
+      const layout = zone !== undefined ? ORE_LAYOUT[zone][ore.id] : undefined;
+      if (!layout) continue;
+      ore.x = width * layout.pos[0];
+      ore.y = height * layout.pos[1];
     }
+  }
+
+  /** 현재 구역에 있는 광석바위 */
+  private zoneOres(zone = this.zoneIndex): OreNode[] {
+    const layout = ORE_LAYOUT[zone];
+    return layout ? this.oreNodes.filter(ore => layout[ore.id]) : [];
   }
 
   private drawRockShelf(x: number, y: number, width: number, height: number, pointsUp: boolean) {
@@ -2092,7 +2187,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private updateMiningInteraction() {
-    if (this.zoneIndex !== 1) {
+    if (!ORE_LAYOUT[this.zoneIndex]) {
       this.nearbyOre = undefined;
       this.mineBtnBg.setVisible(false);
       this.mineBtnText.setVisible(false);
@@ -2101,7 +2196,7 @@ export class OceanScene extends Phaser.Scene {
     this.ensureOreNodes();
     let nearest: OreNode | undefined;
     let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const ore of this.oreNodes) {
+    for (const ore of this.zoneOres()) {
       if (ore.remaining <= 0) continue;
       const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, ore.x, ore.y);
       if (distance <= 92 && distance < nearestDistance) {
@@ -2116,39 +2211,55 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private tryMineNearbyOre() {
-    if (this.zoneIndex !== 1 || !this.nearbyOre || this.nearbyOre.remaining <= 0) {
+    if (!ORE_LAYOUT[this.zoneIndex] || !this.nearbyOre || this.nearbyOre.remaining <= 0) {
       this.audio.playDenied();
       this.showNotice('채굴할 수 있는 광석바위 가까이 다가가세요!');
       return;
     }
-    const roll = Math.random();
-    const mineral = MINERAL_TABLE.find((entry) => roll < entry.limit) ?? MINERAL_TABLE[MINERAL_TABLE.length - 1];
+    const mined = this.rollMineral();
     this.nearbyOre.remaining -= 1;
     if (this.nearbyOre.remaining <= 0) this.nearbyOre.respawnRemaining = ORE_RESPAWN_SECONDS;
-    this.mineralInventory[mineral.name] += 1;
+    this.mineralInventory[mined.name] += 1;
     this.audio.playCollect();
-    this.showMinedMineral(this.nearbyOre, mineral.name, mineral.color);
+    if (mined.rare) this.audio.playLevelUp();
+    this.showMinedMineral(this.nearbyOre, mined.name, mined.color);
     const remaining = this.nearbyOre.remaining;
     this.showNotice(
-      `⛏️ ${mineral.name} 획득! (확률 ${mineral.chance}%)\n광석바위 남은 광질 ${remaining}/${ORE_MINES_PER_NODE}`
+      `${mined.rare ? '🌟 희귀 광물! ' : '⛏️ '}${mined.name} 획득! (확률 ${mined.chance}%)\n광석바위 남은 광질 ${remaining}/${ORE_MINES_PER_NODE}`
     );
     this.drawZoneBackdrop();
     this.updateMiningInteraction();
     this.updateHud();
   }
 
+  /** 빙하수 골짜기에 가 봤다면 희귀 광물 5종이 각각 1% 확률로 먼저 나옵니다. 나머지는 기본 표를 따릅니다. */
+  private rollMineral(): { name: MineralType; color: number; chance: number; rare: boolean } {
+    if (this.maxLevelExpanded) {
+      const rareRoll = Math.random();
+      const index = Math.floor(rareRoll / RARE_MINERAL_CHANCE);
+      if (index < RARE_MINERALS.length) {
+        const name = RARE_MINERALS[index];
+        return { name, color: RARE_MINERAL_COLORS[name], chance: RARE_MINERAL_CHANCE * 100, rare: true };
+      }
+    }
+    const roll = Math.random();
+    const mineral = MINERAL_TABLE.find((entry) => roll < entry.limit) ?? MINERAL_TABLE[MINERAL_TABLE.length - 1];
+    return { ...mineral, rare: false };
+  }
+
   private updateOreRespawns(dt: number) {
     let regenerated = false;
+    const here = new Set(this.zoneOres());
     for (const ore of this.oreNodes) {
       if (ore.remaining > 0 || ore.respawnRemaining <= 0) continue;
       ore.respawnRemaining = Math.max(0, ore.respawnRemaining - dt);
       if (ore.respawnRemaining <= 0) {
         ore.remaining = ORE_MINES_PER_NODE;
-        regenerated = true;
+        if (here.has(ore)) regenerated = true;
       }
     }
     if (!regenerated) return;
-    if (this.zoneIndex === 1) {
+    {
       this.drawZoneBackdrop();
       this.updateMiningInteraction();
       this.showNotice('✨ 광석바위가 다시 생성되어 5번 채굴할 수 있습니다!');
@@ -2156,10 +2267,11 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private showMinedMineral(ore: OreNode, name: MineralType, color: number) {
-    const gem = this.add
-      .polygon(ore.x, ore.y - 8, [0, -16, 14, -5, 10, 14, 0, 20, -10, 14, -14, -5], color, 1)
-      .setStrokeStyle(3, 0xffffff, 0.9)
-      .setDepth(20);
+    const icon = MINERAL_ICONS[name];
+    const gem: Phaser.GameObjects.Image | Phaser.GameObjects.Polygon = icon && this.textures.exists(icon)
+      ? this.add.image(ore.x, ore.y - 8, icon).setDisplaySize(46, 46).setDepth(20)
+      : this.add.polygon(ore.x, ore.y - 8, [0, -16, 14, -5, 10, 14, 0, 20, -10, 14, -14, -5], color, 1)
+        .setStrokeStyle(3, 0xffffff, 0.9).setDepth(20);
     const label = this.add
       .text(ore.x, ore.y - 38, name, {
         fontSize: '14px',
@@ -2283,11 +2395,18 @@ export class OceanScene extends Phaser.Scene {
     sprite.setFlipX(artworkFacesLeft ? movingRight : !movingRight);
   }
 
+  /** 공격 1회 피해: 기본 피해 × 강화 배율 × 잠수함 공격 배율 */
+  private shipDamage(scale = 1) {
+    return this.bulletDamage * this.attackMultiplier * shipAttack(this.fleet.equipped) * scale;
+  }
+
   private fireBullet() {
-    if (this.fleet.equipped === 'baby_dragon') { this.releaseAimAfterShot(); return; }
+    const ship = this.fleet.equipped;
+    // 브레스·화염방사·차지·대시는 발사 버튼을 누르고 떼는 동작으로 update에서 처리합니다.
+    if (holdWeapon(ship) || ship === 'mega_voltage' || ship === 'sword_crusher') { this.releaseAimAfterShot(); return; }
     if (this.shootCooldown > 0) return;
     const precisionShot = this.aiming;
-    const weapon = weaponForShip(this.fleet.equipped);
+    const weapon = weaponForShip(ship);
     this.shootCooldown = 0.22 / this.rapidFireMultiplier;
     this.audio.playShoot();
     const x = this.player.x + this.aimDirection.x * 30;
@@ -2295,14 +2414,19 @@ export class OceanScene extends Phaser.Scene {
     const angle = Math.atan2(this.aimDirection.y, this.aimDirection.x);
     let gfx: Phaser.GameObjects.Shape;
     if (weapon === 'ice') gfx = this.add.triangle(x, y, 0, 0, 28, 6, 0, 12, 0x7dd3fc).setStrokeStyle(2, 0xe0f2fe).setRotation(angle);
+    else if (weapon === 'blade') gfx = this.add.triangle(x, y, 0, 0, 44, 5, 0, 10, 0xf0f9ff).setStrokeStyle(2, 0x38bdf8).setRotation(angle);
     else if (weapon === 'laser') gfx = this.add.rectangle(x, y, 32, 5, 0xfde047).setStrokeStyle(1, 0xffffff).setRotation(angle);
-    else gfx = this.add.circle(x, y, weapon === 'fire' ? 9 : precisionShot ? 8 : 6,
-      weapon === 'fire' ? 0xf97316 : precisionShot ? 0xfde047 : 0x38bdf8).setStrokeStyle(2, weapon === 'fire' ? 0xfde047 : 0xe0f2fe);
+    else if (weapon === 'greenLaser') gfx = this.add.rectangle(x, y, 38, 6, 0x4ade80).setStrokeStyle(1.5, 0xdcfce7).setRotation(angle);
+    else gfx = this.add.circle(x, y, weapon === 'fire' ? 9 : weapon === 'rainbow' ? 8 : precisionShot ? 8 : 6,
+      weapon === 'fire' ? 0xf97316 : weapon === 'rainbow' ? 0xf472b6 : precisionShot ? 0xfde047 : 0x38bdf8)
+      .setStrokeStyle(2, weapon === 'fire' ? 0xfde047 : 0xffffff);
     gfx.setDepth(8);
-    const speed = (precisionShot ? 1450 : weapon === 'laser' ? 1100 : 520) * this.bulletSpeedMultiplier;
-    this.bullets.push({ gfx, weapon, damage: this.bulletDamage * this.attackMultiplier,
+    const fast = weapon === 'laser' || weapon === 'greenLaser' ? 1150 : weapon === 'blade' ? 900 : 520;
+    const speed = (precisionShot ? 1450 : fast) * this.bulletSpeedMultiplier;
+    this.bullets.push({ gfx, weapon, damage: this.shipDamage(),
       vx: this.aimDirection.x * speed, vy: this.aimDirection.y * speed,
-      life: precisionShot ? 2 : 1.5, piercing: precisionShot || weapon === 'laser', hitFish: new Set<FishEntity>() });
+      life: precisionShot ? 2 : 1.5, piercing: precisionShot || weapon === 'laser' || weapon === 'greenLaser' || weapon === 'blade',
+      hitFish: new Set<FishEntity>(), rainbow: weapon === 'rainbow' });
     this.releaseAimAfterShot();
   }
 
@@ -2331,13 +2455,17 @@ export class OceanScene extends Phaser.Scene {
     fish.label.setText(this.formatFishLabel(fish));
   }
 
+  private shockRadius() {
+    return this.fleet.equipped === 'mega_voltage' ? COMBAT.megaShockRadius : COMBAT.shockRadius;
+  }
+
   private nearbyShockTargets() {
-    return this.fishList.filter(fish => !fish.stunned && Math.hypot(fish.sprite.x - this.player.x, fish.sprite.y - this.player.y) <= COMBAT.shockRadius);
+    return this.fishList.filter(fish => !fish.stunned && Math.hypot(fish.sprite.x - this.player.x, fish.sprite.y - this.player.y) <= this.shockRadius());
   }
 
   private updateShockButton() {
     if (!this.shockBtnBg) return;
-    const visible = this.fleet.equipped === 'electric';
+    const visible = this.fleet.equipped === 'electric' || this.fleet.equipped === 'mega_voltage';
     const ready = visible && this.shockCooldown <= 0 && this.nearbyShockTargets().length > 0;
     this.shockBtnBg.setVisible(visible).setFillStyle(ready ? 0xa16207 : 0x334155, ready ? 1 : 0.65);
     this.shockBtnText.setVisible(visible).setText(this.shockCooldown > 0
@@ -2345,44 +2473,266 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private tryElectricShock() {
-    if (this.fleet.equipped !== 'electric') return;
+    if (this.fleet.equipped !== 'electric' && this.fleet.equipped !== 'mega_voltage') return;
     if (this.shockCooldown > 0) { this.showNotice(`전기일격 재사용까지 ${Math.ceil(this.shockCooldown)}초`); return; }
     const targets = this.nearbyShockTargets();
     if (!targets.length) { this.showNotice('전기일격 범위에 물고기가 없어요.'); return; }
     this.shockCooldown = COMBAT.shockCooldown;
     for (const fish of targets) { fish.status.paralyzeRemaining = COMBAT.shockSeconds; this.refreshFishStatus(fish); }
-    const flash = this.add.circle(this.player.x, this.player.y, COMBAT.shockRadius, 0xfde047, 0.16)
+    const flash = this.add.circle(this.player.x, this.player.y, this.shockRadius(), 0xfde047, 0.16)
       .setStrokeStyle(4, 0xfef08a).setDepth(12);
     this.tweens.add({ targets: flash, alpha: 0, duration: 450, onComplete: () => flash.destroy() });
     this.audio.playHit(); this.showNotice(`⚡ 물고기 ${targets.length}마리 5초 마비!`); this.updateShockButton();
   }
 
-  private updateDragonBreath(dt: number) {
+  /** 선분이 닿은 보스(지하세계 수룡·헬리코프리온·열수분출공 수룡)에게 피해. 지하세계 수룡 머리는 2배입니다. */
+  private damageBossesOnSegment(ax: number, ay: number, bx: number, by: number, radius: number, damage: number): boolean {
+    const hitboxes = this.getDragonHitboxes();
+    if (this.zoneIndex === DRAGON_ZONE_INDEX && hitboxes && this.dragonSprite?.visible && (this.dragonState === 'awake' || this.dragonState === 'sleeping')) {
+      if (distanceToSegment(hitboxes.head.x, hitboxes.head.y, ax, ay, bx, by) <= hitboxes.head.radius + radius) {
+        this.damageDragon(damage * 2, true, hitboxes.head.x, hitboxes.head.y);
+        return true;
+      }
+      const body = Phaser.Geom.Rectangle.Clone(hitboxes.body);
+      Phaser.Geom.Rectangle.Inflate(body, radius, radius);
+      if (segmentHitsRect(ax, ay, bx, by, body)) { this.damageDragon(damage); return true; }
+      return false;
+    }
+    if (this.zoneIndex === NEST_ZONE_INDEX) return this.helicoprion.hitSegment(ax, ay, bx, by, radius, damage);
+    if (this.zoneIndex === ABYSS_ZONE_INDEX) return this.abyssDragon.hitSegment(ax, ay, bx, by, radius, damage);
+    return false;
+  }
+
+  /** 특별 잠수함 발사 버튼: 브레스·화염방사(누르는 동안), 볼티지 차지(뗄 때), 소드 크러셔 대시·가속 */
+  private updateShipWeapons(dt: number, rawDt: number) {
+    const ship = this.fleet.equipped;
+    const fireDown = this.shootHolding || !!this.keySpace?.isDown;
+    const justPressed = fireDown && !this.fireWasDown;
+    const justReleased = !fireDown && this.fireWasDown;
+    const heldBefore = this.fireHeld;
+    this.fireHeld = fireDown ? this.fireHeld + rawDt : 0;
+    this.fireWasDown = fireDown;
+    this.dashCooldown = Math.max(0, this.dashCooldown - rawDt);
     this.breathGraphics.clear();
     this.breathDamageTimer = Math.max(0, this.breathDamageTimer - dt);
-    if (this.fleet.equipped !== 'baby_dragon' || !(this.shootHolding || this.keySpace?.isDown)) return;
+
+    if (ship === 'rainbow') {
+      this.rainbowRegenTimer -= rawDt;
+      if (this.rainbowRegenTimer <= 0) {
+        this.rainbowRegenTimer = COMBAT.rainbowRegenSeconds;
+        if (this.playerHp < this.maxHp) {
+          const healed = Math.min(COMBAT.rainbowRegenAmount, this.maxHp - this.playerHp);
+          this.playerHp += healed;
+          this.showNotice(`🌈 무지개빛 회복 +${healed} HP`);
+          this.audio.playCollect();
+        }
+      }
+    }
+
+    const hold = holdWeapon(ship);
+    if (hold && fireDown) this.updateHoldWeapon(hold);
+    if (ship === 'mega_voltage') {
+      if (fireDown) this.drawVoltCharge(this.fireHeld);
+      if (justReleased) this.fireVolt(voltChargeLevel(heldBefore));
+    }
+    if (this.voltCannon) this.updateVoltCannon(rawDt);
+    if (ship === 'sword_crusher') {
+      if (justPressed) this.trySawDash();
+      this.speed = 250 * getSubmarine(ship).speed * (fireDown ? sawBoost(this.fireHeld) : 1);
+    }
+  }
+
+  private updateHoldWeapon(kind: 'breath' | 'hyper' | 'flame') {
     this.releaseAimAfterShot();
-    const ax = this.player.x + this.aimDirection.x * 28;
-    const ay = this.player.y + this.aimDirection.y * 28;
-    const bx = ax + this.aimDirection.x * COMBAT.breathLength;
-    const by = ay + this.aimDirection.y * COMBAT.breathLength;
-    this.breathGraphics.lineStyle(COMBAT.breathRadius * 2, 0x0284c7, 0.3).lineBetween(ax, ay, bx, by);
-    this.breathGraphics.lineStyle(22, 0x38bdf8, 0.75).lineBetween(ax, ay, bx, by);
-    this.breathGraphics.lineStyle(7, 0xe0f2fe, 0.95).lineBetween(ax, ay, bx, by);
+    const { width, height } = this.scale;
+    const dx = this.aimDirection.x;
+    const dy = this.aimDirection.y;
+    const ax = this.player.x + dx * 28;
+    const ay = this.player.y + dy * 28;
+    const length = kind === 'breath' ? COMBAT.breathLength : kind === 'hyper' ? Math.hypot(width, height) * 1.2 : COMBAT.flameLength;
+    const radius = kind === 'breath' ? COMBAT.breathRadius : kind === 'hyper' ? COMBAT.hyperRadius : COMBAT.flameRadius;
+    const bx = ax + dx * length;
+    const by = ay + dy * length;
+    const g = this.breathGraphics;
+    if (kind === 'breath') {
+      g.lineStyle(radius * 2, 0x0284c7, 0.3).lineBetween(ax, ay, bx, by);
+      g.lineStyle(22, 0x38bdf8, 0.75).lineBetween(ax, ay, bx, by);
+      g.lineStyle(7, 0xe0f2fe, 0.95).lineBetween(ax, ay, bx, by);
+    } else if (kind === 'hyper') {
+      const pulse = 1 + Math.sin(this.gameClock * 30) * 0.12;
+      g.lineStyle(radius * 2.4 * pulse, 0xf97316, 0.25).lineBetween(ax, ay, bx, by);
+      g.lineStyle(radius * 1.6, 0x14b8a6, 0.55).lineBetween(ax, ay, bx, by);
+      g.lineStyle(radius * 0.8, 0x5eead4, 0.85).lineBetween(ax, ay, bx, by);
+      g.lineStyle(8, 0xfef3c7, 1).lineBetween(ax, ay, bx, by);
+    } else {
+      // 화염방사: 앞으로 갈수록 넓어지는 불꽃 원뿔
+      const px = -dy;
+      const py = dx;
+      for (const [color, alpha, spread] of [[0xdc2626, 0.35, 1.6], [0xf97316, 0.6, 1.15], [0xfde047, 0.85, 0.55]] as const) {
+        const w = radius * spread * (0.9 + Math.random() * 0.2);
+        g.fillStyle(color, alpha).fillTriangle(ax + px * 6, ay + py * 6, bx + px * w, by + py * w, bx - px * w, by - py * w);
+        g.fillTriangle(ax - px * 6, ay - py * 6, bx + px * w, by + py * w, ax + px * 6, ay + py * 6);
+      }
+      for (let i = 0; i < 3; i++) {
+        const t = Math.random();
+        g.fillStyle(0xfde047, 0.9).fillCircle(ax + dx * length * t + px * (Math.random() - 0.5) * radius * t * 2,
+          ay + dy * length * t + py * (Math.random() - 0.5) * radius * t * 2, 3 + Math.random() * 4);
+      }
+    }
     if (this.breathDamageTimer > 0) return;
     this.breathDamageTimer = COMBAT.breathInterval / this.rapidFireMultiplier;
     this.audio.playShoot();
+    const damage = this.shipDamage();
     for (const fish of this.fishList) {
-      if (!fish.stunned && distanceToSegment(fish.sprite.x, fish.sprite.y, ax, ay, bx, by) <= COMBAT.breathRadius + 20) this.damageFish(fish, this.bulletDamage * this.attackMultiplier);
+      if (fish.stunned || distanceToSegment(fish.sprite.x, fish.sprite.y, ax, ay, bx, by) > radius + 20) continue;
+      this.damageFish(fish, damage);
+      if (kind === 'flame' && !fish.stunned) { applyWeaponStatus(fish.status, 'flame'); this.refreshFishStatus(fish); }
     }
+    this.damageBossesOnSegment(ax, ay, bx, by, radius, damage);
+  }
+
+  private drawVoltCharge(held: number) {
+    this.releaseAimAfterShot();
+    const level = voltChargeLevel(held);
+    const color = level === 3 ? 0x60a5fa : level === 2 ? 0x38bdf8 : 0xfde047;
+    const radius = 24 + Math.min(held, COMBAT.voltLevel3) * 18;
+    const g = this.breathGraphics;
+    g.lineStyle(3, color, 0.9).strokeCircle(this.player.x, this.player.y, radius);
+    g.lineStyle(2, 0xfef9c3, 0.6).strokeCircle(this.player.x, this.player.y, radius * (0.6 + Math.sin(this.gameClock * 20) * 0.1));
+    for (let i = 0; i < level * 2; i++) {
+      const a = Math.random() * Math.PI * 2;
+      g.lineStyle(2, 0xfef08a, 0.9).lineBetween(this.player.x + Math.cos(a) * radius * 0.5, this.player.y + Math.sin(a) * radius * 0.5,
+        this.player.x + Math.cos(a + 0.3) * radius, this.player.y + Math.sin(a + 0.3) * radius);
+    }
+    // 차지 단계는 발사 버튼 글자로 보여 줍니다.
+    this.shootBtnText?.setText(`⚡\n${level}단계`);
+  }
+
+  /** 메가 볼티지 차지 공격: 1단계 전기총알, 2단계 고리 전기총알(주변 피해), 3단계 볼티지 캐논(2초) */
+  private fireVolt(level: 1 | 2 | 3) {
+    this.shootBtnText?.setText('⚡\n차지');
+    if (level === 3) {
+      this.voltCannon = { remaining: COMBAT.voltCannonSeconds, tick: 0 };
+      this.audio.playCharge();
+      this.showNotice('⚡ 볼티지 캐논 발사!');
+      return;
+    }
+    this.audio.playShoot();
+    const x = this.player.x + this.aimDirection.x * 30;
+    const y = this.player.y + this.aimDirection.y * 30;
+    const gfx = level === 2
+      ? this.add.circle(x, y, 13, 0xfde047).setStrokeStyle(5, 0x38bdf8)
+      : this.add.circle(x, y, 7, 0xfde047).setStrokeStyle(2, 0xfef9c3);
+    gfx.setDepth(8);
+    const speed = (level === 2 ? 620 : 700) * this.bulletSpeedMultiplier;
+    this.bullets.push({ gfx, weapon: 'volt', damage: this.shipDamage(level === 2 ? 2 : 1),
+      vx: this.aimDirection.x * speed, vy: this.aimDirection.y * speed, life: 1.6, piercing: false,
+      hitFish: new Set<FishEntity>(), splash: level === 2 ? COMBAT.voltRingRadius : undefined });
+  }
+
+  private updateVoltCannon(rawDt: number) {
+    const cannon = this.voltCannon;
+    if (!cannon) return;
+    cannon.remaining -= rawDt;
+    cannon.tick -= rawDt;
+    const { width, height } = this.scale;
+    const ax = this.player.x + this.aimDirection.x * 30;
+    const ay = this.player.y + this.aimDirection.y * 30;
+    const length = Math.hypot(width, height) * 1.2;
+    const bx = ax + this.aimDirection.x * length;
+    const by = ay + this.aimDirection.y * length;
+    const r = COMBAT.voltCannonRadius * (1 + Math.sin(this.gameClock * 40) * 0.08);
+    const g = this.breathGraphics;
+    g.lineStyle(r * 2.2, 0x1d4ed8, 0.3).lineBetween(ax, ay, bx, by);
+    g.lineStyle(r * 1.4, 0x38bdf8, 0.6).lineBetween(ax, ay, bx, by);
+    g.lineStyle(r * 0.6, 0xfde047, 0.9).lineBetween(ax, ay, bx, by);
+    g.lineStyle(4, 0xffffff, 1).lineBetween(ax, ay, bx, by);
+    if (cannon.tick <= 0) {
+      cannon.tick = 0.1;
+      const damage = this.shipDamage();
+      for (const fish of this.fishList) {
+        if (!fish.stunned && distanceToSegment(fish.sprite.x, fish.sprite.y, ax, ay, bx, by) <= COMBAT.voltCannonRadius + 20) this.damageFish(fish, damage);
+      }
+      this.damageBossesOnSegment(ax, ay, bx, by, COMBAT.voltCannonRadius, damage);
+    }
+    if (cannon.remaining <= 0) this.voltCannon = undefined;
+  }
+
+  private voltSplash(x: number, y: number, radius: number, damage: number, except?: FishEntity) {
+    const ring = this.add.circle(x, y, 12, 0x38bdf8, 0.25).setStrokeStyle(4, 0x7dd3fc).setDepth(9);
+    this.tweens.add({ targets: ring, radius, alpha: 0, duration: 320, onComplete: () => ring.destroy() });
+    for (const fish of this.fishList) {
+      if (fish === except || fish.stunned) continue;
+      if (Math.hypot(fish.sprite.x - x, fish.sprite.y - y) <= radius) this.damageFish(fish, damage);
+    }
+  }
+
+  /** 소드 크러셔 대시: 순간이동처럼 빠르게 앞으로 돌진하며 경로의 물고기·보스를 전기톱으로 벱니다. */
+  private trySawDash() {
+    if (this.dashCooldown > 0) return;
+    this.dashCooldown = COMBAT.dashCooldown;
+    this.releaseAimAfterShot();
+    const { width, height } = this.scale;
+    const dx = this.aimDirection.x;
+    const dy = this.aimDirection.y;
+    const sx = this.player.x;
+    const sy = this.player.y;
+    let ex = sx;
+    let ey = sy;
+    const steps = 12;
+    for (let i = 1; i <= steps; i++) {
+      const nx = Phaser.Math.Clamp(sx + dx * COMBAT.dashDistance * (i / steps), 24, width - 24);
+      const ny = Phaser.Math.Clamp(sy + dy * COMBAT.dashDistance * (i / steps), 24, height - 20);
+      if (this.isBlockedForPlayer(nx, ny)) break;
+      ex = nx;
+      ey = ny;
+    }
+    this.player.setPosition(ex, ey);
+    if (Math.abs(dx) > 0.08) { this.facing = dx < 0 ? -1 : 1; this.player.scaleX = this.facing; }
+    this.audio.playSaw();
+    const trail = this.add.graphics().setDepth(9);
+    trail.lineStyle(26, 0x5eead4, 0.25).lineBetween(sx, sy, ex, ey);
+    trail.lineStyle(8, 0xf0fdfa, 0.8).lineBetween(sx, sy, ex, ey);
+    this.tweens.add({ targets: trail, alpha: 0, duration: 260, onComplete: () => trail.destroy() });
+    const damage = this.shipDamage();
+    const fx = ex + dx * 30;
+    const fy = ey + dy * 30;
+    for (const fish of this.fishList) {
+      if (fish.stunned || distanceToSegment(fish.sprite.x, fish.sprite.y, sx, sy, fx, fy) > 42) continue;
+      this.damageFish(fish, damage);
+      this.sawHitTimes.set(fish, this.gameClock);
+    }
+    if (this.damageBossesOnSegment(sx, sy, fx, fy, 18, damage)) this.sawHitTimes.set(this, this.gameClock);
+  }
+
+  /** 소드 크러셔가 가속 중일 때 앞쪽 전기톱에 닿은 대상에게 피해(대상마다 0.4초 간격) */
+  private updateSawContact(previousX: number, previousY: number) {
+    if (this.fleet.equipped !== 'sword_crusher' || this.speed < 250 * 1.3) return;
+    const moved = Math.hypot(this.player.x - previousX, this.player.y - previousY);
+    if (moved < 0.5) return;
+    const fx = this.player.x + this.facing * 34;
+    const fy = this.player.y;
+    const damage = this.shipDamage();
+    const ready = (key: object) => this.gameClock - (this.sawHitTimes.get(key) ?? -99) >= COMBAT.sawCooldown;
+    for (const fish of this.fishList) {
+      if (fish.stunned || !ready(fish) || Math.hypot(fish.sprite.x - fx, fish.sprite.y - fy) > 36) continue;
+      this.sawHitTimes.set(fish, this.gameClock);
+      this.damageFish(fish, damage);
+      this.audio.playSaw();
+    }
+    if (ready(this) && this.damageBossesOnSegment(previousX + this.facing * 34, previousY, fx, fy, 18, damage)) {
+      this.sawHitTimes.set(this, this.gameClock);
+      this.audio.playSaw();
+    }
+  }
+
+  private isBlockedForPlayer(x: number, y: number) {
+    if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(x, y)) return true;
     const hitboxes = this.getDragonHitboxes();
-    if (this.zoneIndex === DRAGON_ZONE_INDEX && hitboxes && (this.dragonState === 'awake' || this.dragonState === 'sleeping')) {
-      if (distanceToSegment(hitboxes.head.x, hitboxes.head.y, ax, ay, bx, by) <= hitboxes.head.radius + COMBAT.breathRadius)
-        this.damageDragon(this.bulletDamage * this.attackMultiplier * 2, true, hitboxes.head.x, hitboxes.head.y);
-      else if (segmentHitsRect(ax, ay, bx, by, hitboxes.body)) this.damageDragon(this.bulletDamage * this.attackMultiplier);
-    }
-    if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.hitSegment(ax, ay, bx, by, COMBAT.breathRadius, this.bulletDamage * this.attackMultiplier);
-    if (this.zoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.hitSegment(ax, ay, bx, by, COMBAT.breathRadius, this.bulletDamage * this.attackMultiplier);
+    if (this.zoneIndex !== DRAGON_ZONE_INDEX || !hitboxes || this.dragonState === 'respawning' || !this.dragonSprite?.visible) return false;
+    const body = Phaser.Geom.Rectangle.Clone(hitboxes.body);
+    Phaser.Geom.Rectangle.Inflate(body, 21, 21);
+    return Phaser.Geom.Rectangle.Contains(body, x, y) || Math.hypot(x - hitboxes.head.x, y - hitboxes.head.y) <= hitboxes.head.radius + 21;
   }
 
   private tryCollectNearbyFish() {
@@ -2457,7 +2807,7 @@ export class OceanScene extends Phaser.Scene {
     this.playerHp = this.maxHp;
     this.bag = [];
     this.dragonLoot = [];
-    for (const { name } of MINERAL_TABLE) this.mineralInventory[name] = 0;
+    for (const name of ALL_MINERALS) this.mineralInventory[name] = 0;
     this.fleet = damageEquippedSubmarine(this.fleet);
     this.armorRemaining = 0;
     this.armorGraphics.clear();
@@ -2493,6 +2843,7 @@ export class OceanScene extends Phaser.Scene {
     const expandedNow = this.zoneIndex === 4 && !this.maxLevelExpanded;
     if (expandedNow) {
       this.maxLevelExpanded = true;
+      this.submarinePanel?.setGlacialVisited(true);
       this.maxLevel = EXPANDED_MAX_LEVEL;
       this.audio.playLevelUp();
     }
@@ -2510,7 +2861,7 @@ export class OceanScene extends Phaser.Scene {
     }
     this.showNotice(
       `${ZONES[this.zoneIndex].name} (${ZONES[this.zoneIndex].minDepth}m~${ZONES[this.zoneIndex].maxDepth}m) 진입!${
-        expandedNow ? '\n⭐ 최대 레벨이 Lv.40으로 확장되었습니다!' : ''
+        expandedNow ? '\n⭐ 최대 레벨이 Lv.40으로 확장되었습니다!\n🔓 상점에 새로운 잠수함 7종이 추가되었습니다!' : ''
       }`
     );
     if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.enter();
@@ -2543,23 +2894,23 @@ export class OceanScene extends Phaser.Scene {
     const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
     const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
     this.statsText.setText(
-      `⚔️ 공격×${this.attackMultiplier}  🛡️ 방어×${defense}${armorText}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
+      `⚔️ 공격×${+(this.attackMultiplier * shipAttack(this.fleet.equipped)).toFixed(2)}  🛡️ 방어×${+defense.toFixed(2)}${armorText}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
     );
     const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
     const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
       .filter(([, count]) => count > 0)
       .map(([name, count]) => `${name}×${count}`)
       .join('  ');
-    const oreRespawns = this.oreNodes
+    const oreRespawns = this.zoneOres()
       .filter((ore) => ore.remaining <= 0 && ore.respawnRemaining > 0)
-      .map((ore) => `${({ upper: '오른쪽 위', lower: '왼쪽 아래', upper_left: '왼쪽 위', lower_right: '오른쪽 아래' })[ore.id]} ${Math.ceil(ore.respawnRemaining)}초`)
+      .map((ore) => `${ORE_LAYOUT[this.zoneIndex]?.[ore.id]?.label ?? ''} ${Math.ceil(ore.respawnRemaining)}초`)
       .join(' · ');
-    const oreTimerText = this.zoneIndex === 1 && oreRespawns ? `\n🪨 광석 재생까지: ${oreRespawns}` : '';
+    const oreTimerText = oreRespawns ? `\n🪨 광석 재생까지: ${oreRespawns}` : '';
     this.mineralText
       .setText(
         `${mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요'}${oreTimerText}`
       )
-      .setVisible(this.zoneIndex === 1 || mineralTotal > 0);
+      .setVisible(Boolean(ORE_LAYOUT[this.zoneIndex]) || mineralTotal > 0);
     this.bagText.setY(Math.max(132, this.hudText.y + this.hudText.height + 6));
     this.statsText.setY(this.bagText.y + this.bagText.height + 4);
     this.mineralText.setY(this.statsText.y + this.statsText.height + 4);
@@ -2568,6 +2919,7 @@ export class OceanScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const rawDt = delta / 1000;
     const { width, height } = this.scale;
+    this.gameClock += rawDt;
 
     if (this.menuMode) {
       this.updateMenuKeyboard();
@@ -2656,6 +3008,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(this.player.x, this.player.y)) {
       this.player.setPosition(previousPlayerX, previousPlayerY);
     }
+    this.updateSawContact(previousPlayerX, previousPlayerY);
     this.drawAimGuide();
     this.updateMiningInteraction();
 
@@ -2744,7 +3097,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex !== zoneBeforeBoss) return;
     this.abyssDragon.update(dt);
     if (this.zoneIndex !== zoneBeforeBoss) return;
-    this.updateDragonBreath(dt);
+    this.updateShipWeapons(dt, rawDt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
@@ -2752,6 +3105,9 @@ export class OceanScene extends Phaser.Scene {
       b.gfx.x += b.vx * dt;
       b.gfx.y += b.vy * dt;
       b.life -= dt;
+      if (b.rainbow && 'setFillStyle' in b.gfx) {
+        (b.gfx as Phaser.GameObjects.Arc).setFillStyle(Phaser.Display.Color.HSVToRGB((this.gameClock * 2.5 + b.life) % 1, 0.75, 1).color as number);
+      }
 
       let hit = false;
       const dragonHitboxes = this.getDragonHitboxes();
@@ -2778,17 +3134,20 @@ export class OceanScene extends Phaser.Scene {
       } else if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 0, b.damage)) {
         hit = true;
       }
+      let directFish: FishEntity | undefined;
       for (const fish of this.fishList) {
         if (hit) break;
         if (fish.stunned || b.hitFish.has(fish)) continue;
         if (distanceToSegment(fish.sprite.x, fish.sprite.y, previousX, previousY, b.gfx.x, b.gfx.y) < 38) {
           b.hitFish.add(fish);
+          directFish = fish;
           this.damageFish(fish, b.damage);
           if (!fish.stunned) { applyWeaponStatus(fish.status, b.weapon); this.refreshFishStatus(fish); }
           hit = !b.piercing;
           if (!b.piercing) break;
         }
       }
+      if (hit && b.splash) this.voltSplash(b.gfx.x, b.gfx.y, b.splash, b.damage, directFish);
 
       if (
         hit ||
