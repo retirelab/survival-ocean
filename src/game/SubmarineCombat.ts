@@ -12,7 +12,7 @@ export const COMBAT = { armorSeconds: 5, armorMultiplier: 2, metalDefense: 4, bu
   slowSeconds: 3, slowMultiplier: 0.5, shockSeconds: 5, shockCooldown: 30, shockRadius: 140,
   breathLength: 420, breathRadius: 24, breathInterval: 0.12,
   /** 메가 볼케이노 화염방사 */
-  flameLength: 210, flameRadius: 42, flameBurnDamage: 8,
+  flameLength: 340, flameRadius: 48, flameBurnDamage: 8,
   /** 메가 블리자드 얼음칼날: 맞을 때마다 속도 ×0.75, 최저 10% */
   bladeSlowStep: 0.75, bladeSlowMin: 0.1,
   /** 메가 볼티지 */
