@@ -2649,7 +2649,7 @@ export class OceanScene extends Phaser.Scene {
     g.lineStyle(4, 0xffffff, 1).lineBetween(ax, ay, bx, by);
     if (cannon.tick <= 0) {
       cannon.tick = 0.1;
-      const damage = this.shipDamage();
+      const damage = this.shipDamage(2);
       for (const fish of this.fishList) {
         if (!fish.stunned && distanceToSegment(fish.sprite.x, fish.sprite.y, ax, ay, bx, by) <= COMBAT.voltCannonRadius + 20) this.damageFish(fish, damage);
       }
