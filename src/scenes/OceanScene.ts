@@ -8,6 +8,7 @@ import { PauseControls } from '../game/PauseControls';
 import { HelicoprionBoss } from './HelicoprionBoss';
 import { AbyssDragonBoss } from './AbyssDragonBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
+import { GLACIAL_ZONE_INDEX, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE, GLACIAL_PASSAGE_WALLS, hitsGlacialWall, glacialPassageExit } from '../game/GlacialPassages';
 import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, ORE_IDS, type SaveGame } from '../game/SaveGame';
 
 const ROCK_BREAM_SPRITE =
@@ -102,6 +103,8 @@ const ZONES: ZoneConfig[] = [
   { id: 6, name: '열수분출공층', minDepth: 600, maxDepth: 700, reqLevel: 18, topColor: 0x0f172a, bottomColor: 0x030712, floorColor: 0x292524 },
   // 지하세계 2층 오른쪽 끝과 이어진 옆 구역. 위아래로는 이동하지 않습니다.
   { id: 7, name: '헬리코프리온의 둥지', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x1c1917, bottomColor: 0x431407, floorColor: 0xf59e0b },
+  { id: FIRST_GLACIAL_PASSAGE, name: '빙하수 골짜기 복도 1', minDepth: 400, maxDepth: 450, reqLevel: 18, topColor: 0x0e3656, bottomColor: 0x155878, floorColor: 0x7dd3fc },
+  { id: SECOND_GLACIAL_PASSAGE, name: '빙하수 골짜기 복도 2', minDepth: 450, maxDepth: 500, reqLevel: 18, topColor: 0x123b59, bottomColor: 0x092e51, floorColor: 0x7dd3fc },
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
@@ -151,7 +154,6 @@ const GLACIAL_FISH_FILES: Record<string, string> = {
   glacial_mako: 'mako', glacial_marlin: 'marlin_blue', glacial_sailfish: 'sailfish_blue', glacial_herring: 'herring',
   glacial_icefish: 'icefish', glacial_mackerel: 'mackerel_atl', glacial_shrimp: 'shrimp_white', glacial_squid: 'squid_red',
 };
-const GLACIAL_ZONE_INDEX = 4;
 
 const UNDERWORLD_2F_LARGE_PREDATOR_HP = 150;
 const UNDERWORLD_2F_FISH: FishSpec[] = [
@@ -852,6 +854,7 @@ export class OceanScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.changeZone(save.zoneIndex, Phaser.Math.Clamp(save.player.y * height, 28, height - 28), false);
     this.player.x = Phaser.Math.Clamp(save.player.x * width, 24, width - 24);
+    this.keepPlayerInGlacialPassage();
     this.facing = save.player.facing;
     this.player.scaleX = this.facing;
     this.aimDirection = { x: this.facing, y: 0 };
@@ -1468,6 +1471,7 @@ export class OceanScene extends Phaser.Scene {
 
     this.player.x = Phaser.Math.Clamp(this.player.x, 24, width - 24);
     this.player.y = Phaser.Math.Clamp(this.player.y, 24, height - 20);
+    this.keepPlayerInGlacialPassage();
     this.hudText.setFontSize(width < 640 ? 12 : 15).setWordWrapWidth(Math.max(100, width - 224));
     for (const text of [this.bagText, this.statsText, this.mineralText]) text.setWordWrapWidth(Math.max(200, width - 48));
     this.statsText.setX(14);
@@ -2030,6 +2034,7 @@ export class OceanScene extends Phaser.Scene {
       this.decoGraphics.fillCircle(width - 50, height - 24, 12);
     } else if (this.zoneIndex === 4) {
       this.drawGlacialValley(width, height);
+      this.decoGraphics.fillStyle(0xa5f3fc, 0.9).fillTriangle(14, height * 0.45, 29, height * 0.43, 29, height * 0.47);
     } else if (this.zoneIndex === 5) {
       this.drawUnderworldSecondFloor(width, height);
       this.ensureOreNodes();
@@ -2039,6 +2044,35 @@ export class OceanScene extends Phaser.Scene {
       this.drawHydrothermalVents(width, height);
     } else if (this.zoneIndex === NEST_ZONE_INDEX) {
       HelicoprionBoss.drawNest(this.decoGraphics, width, height);
+    } else if (GLACIAL_PASSAGE_WALLS[this.zoneIndex]) {
+      this.drawGlacialPassage(width, height);
+    }
+  }
+
+  private drawGlacialPassage(width: number, height: number) {
+    const g = this.decoGraphics;
+    const walls = GLACIAL_PASSAGE_WALLS[this.zoneIndex] ?? [];
+    for (const [index, wall] of walls.entries()) {
+      const points = wall.map(([x, y]) => new Phaser.Geom.Point(x * width, y * height));
+      g.fillStyle(index % 2 ? 0x237fae : 0x1a6b9d).fillPoints(points, true);
+      g.lineStyle(3, 0x9ee9ff, 0.85).strokePoints(points, true);
+    }
+    const x = width * 0.45;
+    const y = height - 8;
+    if (this.zoneIndex === FIRST_GLACIAL_PASSAGE) {
+      g.fillStyle(0xa5f3fc).fillTriangle(x - 10, y - 12, x + 10, y - 12, x, y);
+      const edgeX = width - 11;
+      const edgeY = height * 0.45;
+      g.fillStyle(0xa5f3fc).fillTriangle(edgeX - 12, edgeY - 10, edgeX - 12, edgeY + 10, edgeX, edgeY);
+    } else {
+      g.fillStyle(0xa5f3fc).fillTriangle(x - 10, 18, x + 10, 18, x, 6);
+    }
+  }
+
+  private keepPlayerInGlacialPassage() {
+    const { width, height } = this.scale;
+    if (hitsGlacialWall(this.zoneIndex, this.player.x, this.player.y, width, height)) {
+      this.player.setPosition(width * 0.45, height * 0.76);
     }
   }
 
@@ -2679,7 +2713,7 @@ export class OceanScene extends Phaser.Scene {
     const sy = this.player.y;
     let ex = sx;
     let ey = sy;
-    const steps = 12;
+    const steps = GLACIAL_PASSAGE_WALLS[this.zoneIndex] ? Math.ceil(COMBAT.dashDistance / 6) : 12;
     for (let i = 1; i <= steps; i++) {
       const nx = Phaser.Math.Clamp(sx + dx * COMBAT.dashDistance * (i / steps), 24, width - 24);
       const ny = Phaser.Math.Clamp(sy + dy * COMBAT.dashDistance * (i / steps), 24, height - 20);
@@ -2727,6 +2761,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private isBlockedForPlayer(x: number, y: number) {
+    if (hitsGlacialWall(this.zoneIndex, x, y, this.scale.width, this.scale.height)) return true;
     if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(x, y)) return true;
     const hitboxes = this.getDragonHitboxes();
     if (this.zoneIndex !== DRAGON_ZONE_INDEX || !hitboxes || this.dragonState === 'respawning' || !this.dragonSprite?.visible) return false;
@@ -2885,7 +2920,8 @@ export class OceanScene extends Phaser.Scene {
       ? ` | 전리품: ${[...lootCounts].map(([name, count]) => `${name.replace('헬리코프리온의 ', '헬리 ').replace('수룡의 ', '수룡 ')}×${count}`).join(' ')}`
       : '';
     const population = this.zoneIndex === DRAGON_ZONE_INDEX || this.zoneIndex === ABYSS_ZONE_INDEX ? '수룡 전용 구역'
-      : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
+      : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역'
+        : GLACIAL_PASSAGE_WALLS[this.zoneIndex] ? '빙하 복도 · 물고기 없음' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
     this.updateShockButton();
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
@@ -3001,8 +3037,16 @@ export class OceanScene extends Phaser.Scene {
     const previousPlayerX = this.player.x;
     const previousPlayerY = this.player.y;
     if (!this.aiming) {
-      this.player.x = Phaser.Math.Clamp(this.player.x + vx * this.speed * dt, 24, width - 24);
-      this.player.y = Phaser.Math.Clamp(this.player.y + vy * this.speed * dt, 24, height - 20);
+      const dx = vx * this.speed * dt;
+      const dy = vy * this.speed * dt;
+      const passage = !!GLACIAL_PASSAGE_WALLS[this.zoneIndex];
+      const steps = passage ? Math.max(1, Math.ceil(Math.hypot(dx, dy) / 6)) : 1;
+      for (let i = 0; i < steps; i++) {
+        const x = Phaser.Math.Clamp(this.player.x + dx / steps, 24, width - 24);
+        const y = Phaser.Math.Clamp(this.player.y + dy / steps, 24, height - 20);
+        if (!passage || !hitsGlacialWall(this.zoneIndex, x, this.player.y, width, height)) this.player.x = x;
+        if (!passage || !hitsGlacialWall(this.zoneIndex, this.player.x, y, width, height)) this.player.y = y;
+      }
     }
     this.preventPlayerInsideDragon(previousPlayerX, previousPlayerY);
     if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(this.player.x, this.player.y)) {
@@ -3046,6 +3090,13 @@ export class OceanScene extends Phaser.Scene {
       if (!muted) this.audio.playCollect();
     }
 
+    const passageExit = glacialPassageExit(this.zoneIndex, this.player.x, this.player.y, width, height);
+    if (passageExit) {
+      this.player.x = passageExit.x;
+      this.changeZone(passageExit.zone, passageExit.y);
+      return;
+    }
+
     if (this.zoneIndex === UNDERWORLD_2F_ZONE_INDEX && this.player.x >= width - 26) {
       this.changeZone(NEST_ZONE_INDEX, height * NEST_ENTRANCE.height * 0.6);
       this.player.x = width * NEST_ENTRANCE.width + 40;
@@ -3077,7 +3128,7 @@ export class OceanScene extends Phaser.Scene {
       }
     }
 
-    if (this.player.y <= 26 && this.zoneIndex > 0 && this.zoneIndex !== NEST_ZONE_INDEX) {
+    if (this.player.y <= 26 && this.zoneIndex > 0 && this.zoneIndex <= LAST_DEPTH_ZONE_INDEX) {
       this.changeZone(this.zoneIndex - 1, height - 56);
       return;
     }

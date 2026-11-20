@@ -8,6 +8,8 @@ export const ZONE_TRACKS = [
   'current_and_stone.mp3', // 5 지하세계 2층
   'pressure_and_salt.mp3', // 6 열수분출공층 (전용 곡 전까지 지하세계 곡)
   'current_and_stone.mp3', // 7 헬리코프리온의 둥지 (보스전이 아닐 때, 지하세계 2층과 같은 곡)
+  'light_through_the_fissure.mp3', // 8 빙하수 골짜기 복도 1
+  'light_through_the_fissure.mp3', // 9 빙하수 골짜기 복도 2
 ] as const;
 
 /** 보스전 동안 구역 곡 대신 재생하는 곡 */

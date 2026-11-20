@@ -1,10 +1,11 @@
 import { normalizeFleet, BASE_MINERALS, RARE_MINERALS, type FleetState } from './Submarines.js';
 import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
+import { SECOND_GLACIAL_PASSAGE } from './GlacialPassages.js';
 import { isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
-/** 마지막 구역(헬리코프리온의 둥지) 번호. 구역을 추가하면 함께 올려야 합니다. */
-export const MAX_ZONE_INDEX = 7;
+/** 저장할 수 있는 가장 큰 구역 번호. */
+export const MAX_ZONE_INDEX = SECOND_GLACIAL_PASSAGE;
 export const BASE_MAX_LEVEL = 20;
 export const EXPANDED_MAX_LEVEL = 40;
 /** 강화 메뉴 단계(기본~GOLD)와 수룡 구역 번호. 강화 단계는 0~3까지만 존재합니다. */

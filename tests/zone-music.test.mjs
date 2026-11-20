@@ -29,7 +29,7 @@ test('every zone maps to its track under the Pages base path', async () => {
   assert.equal(media.loop, true);
   assert.deepEqual(ZONE_TRACKS, ['morning_at_the_reef.mp3', 'the_weight_of_water.mp3', 'pressure_at_twelve_fathoms.mp3',
     'pressure_and_salt.mp3', 'light_through_the_fissure.mp3', 'current_and_stone.mp3', 'pressure_and_salt.mp3',
-    'current_and_stone.mp3']);
+    'current_and_stone.mp3', 'light_through_the_fissure.mp3', 'light_through_the_fissure.mp3']);
   music.unlock();
   for (let zone = 0; zone < ZONE_TRACKS.length; zone++) {
     music.setZone(zone);

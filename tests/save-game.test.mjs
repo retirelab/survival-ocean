@@ -1,6 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import { craftOrEquip, damageEquippedSubmarine, emptyResources, repairSeconds } from '../.test-build/Submarines.js';
 import assert from 'node:assert/strict';
+import { FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE } from '../.test-build/GlacialPassages.js';
 import { readSave, writeSave, isSaveGame, resolveProgress, SAVE_KEY, MAX_ZONE_INDEX } from '../.test-build/SaveGame.js';
 
 const sample = () => ({
@@ -108,7 +109,7 @@ test('four mining rocks round-trip while older two-rock saves remain valid', () 
 });
 
 test('post-dragon depths and expanded levels can be saved and loaded', () => {
-  for (const zoneIndex of [4, 5, MAX_ZONE_INDEX]) {
+  for (const zoneIndex of [4, 5, 7, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE]) {
     const data = { ...sample(), zoneIndex, level: 40,
       progress: { maxLevelExpanded: true, dragonPassUnlocked: true } };
     assert.equal(writeSave(data), true, `zone ${zoneIndex}`);
