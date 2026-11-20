@@ -1,3 +1,5 @@
+import { MX3Boss } from './MX3Boss';
+import { MX3, MX3_ZONE_INDEX } from '../game/MX3';
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
@@ -105,6 +107,7 @@ const ZONES: ZoneConfig[] = [
   { id: 7, name: '헬리코프리온의 둥지', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x1c1917, bottomColor: 0x431407, floorColor: 0xf59e0b },
   { id: FIRST_GLACIAL_PASSAGE, name: '빙하수 골짜기 복도 1', minDepth: 400, maxDepth: 450, reqLevel: 18, topColor: 0x0e3656, bottomColor: 0x155878, floorColor: 0x7dd3fc },
   { id: SECOND_GLACIAL_PASSAGE, name: '빙하수 골짜기 복도 2', minDepth: 450, maxDepth: 500, reqLevel: 18, topColor: 0x123b59, bottomColor: 0x092e51, floorColor: 0x7dd3fc },
+  { id: MX3_ZONE_INDEX, name: '지하세계 3층', minDepth: 500, maxDepth: 600, reqLevel: 18, topColor: 0x1c1e43, bottomColor: 0x111125, floorColor: 0x27243d },
 ];
 
 const SHALLOW_FISH: FishSpec[] = [
@@ -332,6 +335,7 @@ export class OceanScene extends Phaser.Scene {
   private dragonPassUnlocked = false;
   private helicoprion!: HelicoprionBoss;
   private abyssDragon!: AbyssDragonBoss;
+  private mx3Boss!: MX3Boss;
   private auraTimer = 0;
 
   private menuMode: MenuMode = null;
@@ -556,6 +560,24 @@ export class OceanScene extends Phaser.Scene {
       },
     });
 
+    this.mx3Boss = new MX3Boss(this, this.audio, {
+      player: () => ({ x: this.player.x, y: this.player.y }),
+      aim: () => this.aimDirection,
+      bombKnockback: origin => this.takeMX3BombHit(origin),
+      damage: (amount, label) => this.damagePlayer(amount, label),
+      stopInput: () => this.resetHeldInput(),
+      notify: message => this.showNotice(message),
+      reward: items => {
+        this.dragonLoot.push(...items);
+        this.audio.playCollect();
+        const data = this.captureSave();
+        const saved = writeSave(data);
+        if (saved) this.savedGame = { data, error: null };
+        this.showNotice(`M-X 3 격파! ${items.join(' · ')} 획득${saved ? '' : '\n자동 저장 실패. 브라우저 저장 설정을 확인하세요.'}`);
+        this.updateHud();
+      },
+    });
+
     this.pauseControls = new PauseControls({
       pause: () => {
         this.resetHeldInput();
@@ -590,6 +612,7 @@ export class OceanScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown', unlockAudio);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.keyboard?.off('keydown', unlockAudio);
+      this.mx3Boss.leave();
       this.submarinePanel?.destroy();
       this.pauseControls?.destroy();
       this.scale.off('resize', onResize);
@@ -796,6 +819,7 @@ export class OceanScene extends Phaser.Scene {
         respawn: this.dragonRespawnRemaining, cooldown: this.dragonAttackCooldown },
       helicoprion: this.helicoprion.snapshot(),
       abyssDragon: this.abyssDragon.snapshot(),
+      mx3: this.mx3Boss.snapshot(),
       ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
       menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
         nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
@@ -851,6 +875,8 @@ export class OceanScene extends Phaser.Scene {
     this.helicoprion.load(save.helicoprion);
     this.abyssDragon.leave();
     this.abyssDragon.load(save.abyssDragon);
+    this.mx3Boss.leave();
+    this.mx3Boss.load(save.mx3);
     const { width, height } = this.scale;
     this.changeZone(save.zoneIndex, Phaser.Math.Clamp(save.player.y * height, 28, height - 28), false);
     this.player.x = Phaser.Math.Clamp(save.player.x * width, 24, width - 24);
@@ -996,6 +1022,8 @@ export class OceanScene extends Phaser.Scene {
         return;
       }
 
+      if (this.mx3Boss.handlePointer(px, py, Phaser.Math.Distance.Between(px, py, this.collectBtnBg.x, this.collectBtnBg.y) <= 38)) return;
+
       if (this.shockBtnBg.visible && Phaser.Math.Distance.Between(px, py, this.shockBtnBg.x, this.shockBtnBg.y) <= 34) {
         this.tryElectricShock();
         return;
@@ -1111,6 +1139,16 @@ export class OceanScene extends Phaser.Scene {
       this.shootHolding = false;
       this.shootBtnBg.setScale(1);
     }
+    if (this.mx3Boss.talking) {
+      if (this.mx3Boss.choosing) {
+        if (this.keyNumbers[0] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[0])) this.mx3Boss.advance(0);
+        else if (this.keyNumbers[1] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[1])) this.mx3Boss.advance(1);
+      } else if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
+        this.mx3Boss.advance();
+      }
+      return;
+    }
+
     this.updateAimingInput();
   }
 
@@ -1480,6 +1518,7 @@ export class OceanScene extends Phaser.Scene {
     this.layoutDragon();
     this.helicoprion?.layout(width, height);
     this.abyssDragon?.layout(width, height);
+    this.mx3Boss?.layout();
     this.updateMiningInteraction();
     if (this.menuMode) this.rebuildMenu();
   }
@@ -2044,6 +2083,19 @@ export class OceanScene extends Phaser.Scene {
       this.drawHydrothermalVents(width, height);
     } else if (this.zoneIndex === NEST_ZONE_INDEX) {
       HelicoprionBoss.drawNest(this.decoGraphics, width, height);
+    } else if (this.zoneIndex === MX3_ZONE_INDEX) {
+      const g = this.decoGraphics;
+      g.fillStyle(zone.floorColor).fillTriangle(0, height, 0, height * .80, width * .17, height);
+      g.fillTriangle(width, height, width, height * .80, width * .83, height);
+      g.lineStyle(5, 0xb752ad, .8);
+      for (const x of [width * .075, width * .925]) {
+        const y = height * .8;
+        g.lineBetween(x, y + 25, x, y - 42);
+        g.lineBetween(x, y - 2, x - 18, y - 27);
+        g.lineBetween(x, y - 9, x + 17, y - 34);
+      }
+      const x = width / 2;
+      g.fillStyle(0xa5f3fc, .85).fillTriangle(x - 10, 18, x + 10, 18, x, 6);
     } else if (GLACIAL_PASSAGE_WALLS[this.zoneIndex]) {
       this.drawGlacialPassage(width, height);
     }
@@ -2066,6 +2118,7 @@ export class OceanScene extends Phaser.Scene {
       g.fillStyle(0xa5f3fc).fillTriangle(edgeX - 12, edgeY - 10, edgeX - 12, edgeY + 10, edgeX, edgeY);
     } else {
       g.fillStyle(0xa5f3fc).fillTriangle(x - 10, 18, x + 10, 18, x, 6);
+      g.fillTriangle(x - 10, y - 12, x + 10, y - 12, x, y);
     }
   }
 
@@ -2534,6 +2587,7 @@ export class OceanScene extends Phaser.Scene {
     }
     if (this.zoneIndex === NEST_ZONE_INDEX) return this.helicoprion.hitSegment(ax, ay, bx, by, radius, damage);
     if (this.zoneIndex === ABYSS_ZONE_INDEX) return this.abyssDragon.hitSegment(ax, ay, bx, by, radius, damage);
+    if (this.zoneIndex === MX3_ZONE_INDEX) return this.mx3Boss.hitSegment(ax, ay, bx, by, radius, damage);
     return false;
   }
 
@@ -2771,6 +2825,10 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private tryCollectNearbyFish() {
+    if (this.zoneIndex === MX3_ZONE_INDEX) {
+      this.mx3Boss.collect();
+      return;
+    }
     if (this.bag.length >= this.maxBag) {
       this.audio.playDenied();
       this.showNotice(`가방이 ${this.maxBag}마리로 가득 찼어요! 수조 버튼(T)을 눌러 가방을 비우세요.`);
@@ -2817,11 +2875,11 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  private damagePlayer(amount: number, attackerName: string, fromFish = false, ignoreInvuln = false): boolean {
+  private damagePlayer(amount: number, attackerName: string, fromFish = false, ignoreInvuln = false, fixedDamage = false): boolean {
     if (this.playerInvuln > 0 && !ignoreInvuln) return false;
     if (fromFish && this.fleet.equipped === 'sturdy') this.armorRemaining = COMBAT.armorSeconds;
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
-    const reducedAmount = Math.max(1, Math.ceil(amount / defense));
+    const reducedAmount = fixedDamage ? amount : Math.max(1, Math.ceil(amount / defense));
     this.playerHp = Math.max(0, this.playerHp - reducedAmount);
     // 긴 브레스처럼 연속으로 들어오는 피해는 무적시간을 만들지 않습니다.
     if (!ignoreInvuln) this.playerInvuln = 1.0;
@@ -2834,6 +2892,20 @@ export class OceanScene extends Phaser.Scene {
     this.audio.playDamage();
     this.updateHud();
     return false;
+  }
+
+  private takeMX3BombHit(origin: { x: number; y: number }) {
+    if (this.damagePlayer(MX3.bombDamage, 'M-X 3의 폭탄', false, true, true)) return;
+    this.playerInvuln = 1;
+    const { width, height } = this.scale;
+    let dx = this.player.x - origin.x;
+    let dy = this.player.y - origin.y;
+    if (Math.hypot(dx, dy) < 1) { dx = 0; dy = -1; }
+    const length = Math.hypot(dx, dy);
+    this.player.setPosition(
+      Phaser.Math.Clamp(this.player.x + 185 * dx / length, 24, width - 24),
+      Phaser.Math.Clamp(this.player.y + 185 * dy / length, 34, height - 20),
+    );
   }
 
   private respawnAfterDeath() {
@@ -2869,6 +2941,7 @@ export class OceanScene extends Phaser.Scene {
     if (previousZoneIndex === DRAGON_ZONE_INDEX) this.setDragonZoneVisibility(false);
     if (previousZoneIndex === NEST_ZONE_INDEX) this.helicoprion.leave();
     if (previousZoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.leave();
+    if (previousZoneIndex === MX3_ZONE_INDEX) this.mx3Boss.leave();
     for (const f of this.fishList) {
       f.sprite.destroy();
       f.label.destroy();
@@ -2901,6 +2974,7 @@ export class OceanScene extends Phaser.Scene {
     );
     if (this.zoneIndex === NEST_ZONE_INDEX) this.helicoprion.enter();
     if (this.zoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.enter();
+    if (this.zoneIndex === MX3_ZONE_INDEX) this.mx3Boss.enter();
     this.updateHud();
   }
 
@@ -2921,6 +2995,7 @@ export class OceanScene extends Phaser.Scene {
       : '';
     const population = this.zoneIndex === DRAGON_ZONE_INDEX || this.zoneIndex === ABYSS_ZONE_INDEX ? '수룡 전용 구역'
       : this.zoneIndex === NEST_ZONE_INDEX ? '헬리코프리온 전용 구역'
+        : this.zoneIndex === MX3_ZONE_INDEX ? 'M-X 3 비밀기지'
         : GLACIAL_PASSAGE_WALLS[this.zoneIndex] ? '빙하 복도 · 물고기 없음' : `물고기: ${this.fishList.length}/${this.maxFishPerZone}`;
     this.bagText.setText(`🎒 가방: ${this.bag.length}/${this.maxBag}마리 | ${population}${lootSummary}`);
     this.updateShockButton();
@@ -3074,6 +3149,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.keyB && Phaser.Input.Keyboard.JustDown(this.keyB)) this.tryElectricShock();
     if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
       this.tryCollectNearbyFish();
+      if (this.mx3Boss.talking) return;
     }
     if (this.keyT && Phaser.Input.Keyboard.JustDown(this.keyT)) {
       this.emptyBagToTank();
@@ -3148,6 +3224,8 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex !== zoneBeforeBoss) return;
     this.abyssDragon.update(dt);
     if (this.zoneIndex !== zoneBeforeBoss) return;
+    this.mx3Boss.update(dt);
+    if (this.zoneIndex !== zoneBeforeBoss || this.mx3Boss.talking) return;
     this.updateShipWeapons(dt, rawDt);
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
@@ -3185,6 +3263,7 @@ export class OceanScene extends Phaser.Scene {
       } else if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 0, b.damage)) {
         hit = true;
       }
+      if (this.zoneIndex === MX3_ZONE_INDEX && this.mx3Boss.hitSegment(previousX, previousY, b.gfx.x, b.gfx.y, 0, b.damage)) hit = true;
       let directFish: FishEntity | undefined;
       for (const fish of this.fishList) {
         if (hit) break;

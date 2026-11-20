@@ -109,7 +109,7 @@ test('four mining rocks round-trip while older two-rock saves remain valid', () 
 });
 
 test('post-dragon depths and expanded levels can be saved and loaded', () => {
-  for (const zoneIndex of [4, 5, 7, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE]) {
+  for (const zoneIndex of [4, 5, 7, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE, MAX_ZONE_INDEX]) {
     const data = { ...sample(), zoneIndex, level: 40,
       progress: { maxLevelExpanded: true, dragonPassUnlocked: true } };
     assert.equal(writeSave(data), true, `zone ${zoneIndex}`);

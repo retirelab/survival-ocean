@@ -4,6 +4,7 @@ import {
   GLACIAL_ZONE_INDEX, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE,
   hitsGlacialWall, glacialPassageExit,
 } from '../.test-build/GlacialPassages.js';
+import { MX3_ZONE_INDEX } from '../.test-build/MX3.js';
 import { ZONE_TRACKS } from '../.test-build/ZoneMusic.js';
 
 test('first and second glacial passages connect both ways without trapping the submarine', () => {
@@ -39,13 +40,16 @@ test('first and second glacial passages connect both ways without trapping the s
   }
 });
 
-test('ice walls and icicles block the player and the second passage ends in solid ice', () => {
+test('ice walls and icicles block the player and the second passage opens into Underworld 3F', () => {
   const width = 1000, height = 700;
   for (const [zone, x, y] of [[FIRST_GLACIAL_PASSAGE, .1, .7], [FIRST_GLACIAL_PASSAGE, .45, .48],
-    [FIRST_GLACIAL_PASSAGE, .9, .85], [SECOND_GLACIAL_PASSAGE, .8, .4], [SECOND_GLACIAL_PASSAGE, .45, .98]]) {
+    [FIRST_GLACIAL_PASSAGE, .9, .85], [SECOND_GLACIAL_PASSAGE, .8, .4]]) {
     assert.equal(hitsGlacialWall(zone, x * width, y * height, width, height), true);
   }
-  assert.equal(glacialPassageExit(SECOND_GLACIAL_PASSAGE, width * .45, height - 20, width, height), undefined);
+  assert.equal(hitsGlacialWall(SECOND_GLACIAL_PASSAGE, width * .45, height - 20, width, height), false);
+  const arena = glacialPassageExit(SECOND_GLACIAL_PASSAGE, width * .45, height - 20, width, height);
+  assert.equal(arena.zone, MX3_ZONE_INDEX);
+  assert.equal(glacialPassageExit(arena.zone, arena.x, 24, width, height).zone, SECOND_GLACIAL_PASSAGE);
   assert.equal(ZONE_TRACKS[FIRST_GLACIAL_PASSAGE], ZONE_TRACKS[GLACIAL_ZONE_INDEX]);
   assert.equal(ZONE_TRACKS[SECOND_GLACIAL_PASSAGE], ZONE_TRACKS[GLACIAL_ZONE_INDEX]);
 });

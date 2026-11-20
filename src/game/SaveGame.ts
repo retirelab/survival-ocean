@@ -1,11 +1,11 @@
 import { normalizeFleet, BASE_MINERALS, RARE_MINERALS, type FleetState } from './Submarines.js';
 import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
-import { SECOND_GLACIAL_PASSAGE } from './GlacialPassages.js';
+import { MX3_ZONE_INDEX, isMX3Save, type MX3Save } from './MX3.js';
 import { isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
 /** 저장할 수 있는 가장 큰 구역 번호. */
-export const MAX_ZONE_INDEX = SECOND_GLACIAL_PASSAGE;
+export const MAX_ZONE_INDEX = MX3_ZONE_INDEX;
 export const BASE_MAX_LEVEL = 20;
 export const EXPANDED_MAX_LEVEL = 40;
 /** 강화 메뉴 단계(기본~GOLD)와 수룡 구역 번호. 강화 단계는 0~3까지만 존재합니다. */
@@ -27,6 +27,7 @@ export interface SaveGame {
   progress?: SaveProgress;
   helicoprion?: HelicoprionSave;
   abyssDragon?: AbyssDragonSave;
+  mx3?: MX3Save;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -61,6 +62,7 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (progress !== undefined && (!object(progress) || typeof progress.maxLevelExpanded !== 'boolean' ||
       typeof progress.dragonPassUnlocked !== 'boolean')) return false;
   if (value.helicoprion !== undefined && !isHelicoprionSave(value.helicoprion)) return false;
+  if (value.mx3 !== undefined && !isMX3Save(value.mx3)) return false;
   if (value.abyssDragon !== undefined && !isAbyssDragonSave(value.abyssDragon)) return false;
   const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
   if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;

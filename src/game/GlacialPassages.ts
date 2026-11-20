@@ -1,3 +1,4 @@
+import { MX3_ZONE_INDEX } from './MX3.js';
 import { distanceToSegment } from './SubmarineCombat.js';
 
 export const GLACIAL_ZONE_INDEX = 4;
@@ -20,7 +21,6 @@ export const GLACIAL_PASSAGE_WALLS: Readonly<Partial<Record<number, readonly (re
   [SECOND_GLACIAL_PASSAGE]: [
     leftWall,
     [[0.63, 0], [1, 0], [1, 1], [0.58, 1], [0.60, 0.82], [0.63, 0.65], [0.64, 0.41], [0.65, 0.17]],
-    [[0, 0.94], [0.29, 0.94], [0.45, 0.92], [0.59, 0.94], [1, 0.94], [1, 1], [0, 1]],
   ],
 };
 
@@ -60,6 +60,12 @@ export function glacialPassageExit(zone: number, x: number, y: number, width: nu
   }
   if (zone === SECOND_GLACIAL_PASSAGE && y <= 26) {
     return { zone: FIRST_GLACIAL_PASSAGE, x: width * 0.45, y: height - inset };
+  }
+  if (zone === SECOND_GLACIAL_PASSAGE && y >= height - 22) {
+    return { zone: MX3_ZONE_INDEX, x: width / 2, y: inset };
+  }
+  if (zone === MX3_ZONE_INDEX && y <= 26) {
+    return { zone: SECOND_GLACIAL_PASSAGE, x: width * 0.45, y: height - inset };
   }
   return undefined;
 }
