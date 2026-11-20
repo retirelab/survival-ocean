@@ -185,8 +185,8 @@ const MINERAL_TABLE: Array<{ name: MineralType; limit: number; color: number; ch
   { name: '토파즈', limit: 0.75, color: 0xf59e0b, chance: 20 },
   { name: '부싯돌', limit: 1, color: 0x374151, chance: 25 },
 ];
-/** 빙하수 골짜기에 가 본 뒤에만 나오는 희귀 광물: 한 번 캘 때 각각 1% (합계 5%) */
-const RARE_MINERAL_CHANCE = 0.01;
+/** 빙하수 골짜기에 가 본 뒤에만 나오는 희귀 광물: 한 번 캘 때 각각 4% (합계 20%) */
+const RARE_MINERAL_CHANCE = 0.04;
 const RARE_MINERAL_COLORS: Record<string, number> = {
   그라시스메탈: 0x38bdf8, 레인보우크리스탈: 0xf0abfc, '슈퍼 루비': 0xdc2626, '슈퍼 사파이어': 0x1d4ed8, '슈퍼 토파즈': 0xeab308,
 };
@@ -2232,7 +2232,7 @@ export class OceanScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  /** 빙하수 골짜기에 가 봤다면 희귀 광물 5종이 각각 1% 확률로 먼저 나옵니다. 나머지는 기본 표를 따릅니다. */
+  /** 빙하수 골짜기에 가 봤다면 희귀 광물 5종이 각각 4% 확률로 먼저 나옵니다. 나머지는 기본 표를 따릅니다. */
   private rollMineral(): { name: MineralType; color: number; chance: number; rare: boolean } {
     if (this.maxLevelExpanded) {
       const rareRoll = Math.random();
