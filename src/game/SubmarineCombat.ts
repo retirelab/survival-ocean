@@ -18,7 +18,7 @@ export const COMBAT = { armorSeconds: 5, armorMultiplier: 2, metalDefense: 4, bu
   /** 메가 볼티지 */
   megaShockRadius: 260, voltLevel2: 0.6, voltLevel3: 1.5, voltRingRadius: 95, voltCannonSeconds: 2, voltCannonRadius: 46,
   /** 소드 크러셔 */
-  dashDistance: 190, dashCooldown: 0.35, boostDelay: 0.25, boostMax: 2.8, boostRate: 0.9, sawCooldown: 0.4,
+  dashDistance: 290, dashCooldown: 0.35, boostDelay: 0.25, boostMax: 2.8, boostRate: 0.9, sawCooldown: 0.4,
   /** 마스터 드래곤 하이퍼 브레스 */
   hyperRadius: 40,
   /** 무지개빛 잠수함 회복 */

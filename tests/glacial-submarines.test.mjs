@@ -15,7 +15,7 @@ test('the seven special submarines only appear after visiting the glacial valley
 test('attack and defense multipliers follow the design', () => {
   const expected = {
     hi_metal: [5, 10], rainbow: [10, 5], mega_volcano: [5, 5], mega_blizzard: [5, 5],
-    mega_voltage: [5, 5], sword_crusher: [15, 3], master_dragon: [15, 15], metal: [1, 4], basic: [1, 1],
+    mega_voltage: [5, 5], sword_crusher: [15, 3], master_dragon: [6, 6], metal: [1, 4], basic: [1, 1],
   };
   for (const [id, [attack, defense]] of Object.entries(expected)) {
     assert.equal(shipAttack(id), attack, id);

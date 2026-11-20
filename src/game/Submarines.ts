@@ -37,7 +37,7 @@ export const SUBMARINES: readonly Submarine[] = [
   { id: 'mega_blizzard', name: '메가 블리자드 잠수함', grade: 0, color: '#bae6fd', trim: '#1e3a8a', glacial: true, recipe: { '슈퍼 사파이어': 2, 사파이어: 4 }, description: '슈퍼 사파이어 빙결 엔진과 칼날 같은 얼음 지느러미', ability: '방어 5배 · 공격 5배 · 날카로운 얼음칼날 · 맞힐수록 물고기가 점점 느려짐', speed: 1, attack: 5, defense: 5 },
   { id: 'mega_voltage', name: '메가 볼티지 잠수함', grade: 0, color: '#fde047', trim: '#1d4ed8', glacial: true, recipe: { '슈퍼 토파즈': 2, 토파즈: 4 }, description: '슈퍼 토파즈 축전기와 푸른 전자기 고리', ability: '방어 5배 · 공격 5배 · 전기일격 범위 증가 · 길게 눌러 3단계 차지(전기총알→고리 전기총알→볼티지 캐논)', speed: 1, attack: 5, defense: 5 },
   { id: 'sword_crusher', name: '소드 크러셔 잠수함', grade: 0, color: '#cbd5e1', trim: '#0f766e', glacial: true, recipe: { '헬리코프리온의 아래턱': 1, '헬리코프리온의 비늘': 1, 다이아몬드: 4, 그라시스메탈: 1 }, description: '헬리코프리온의 톱날 아래턱을 단 돌격 잠수함', ability: '방어 3배 · 공격 15배 · 총알 대신 대시로 앞쪽 전기톱을 들이박음 · 길게 누르면 점점 빨라짐', speed: 1, attack: 15, defense: 3 },
-  { id: 'master_dragon', name: '마스터 드래곤 잠수함', grade: 0, color: '#fb923c', trim: '#0f766e', glacial: true, recipe: { '수룡의 역광비늘': 1, '수룡의 불멸의 꼬리가시': 1, '수룡의 퇴화된 날개': 2, '수룡의 머리뼈+': 1 }, description: '진화한 수룡의 역광비늘과 꼬리가시로 만든 용 잠수함', ability: '방어 15배 · 공격 15배 · 길게 누르면 매우 긴 하이퍼 브레스', speed: 1, attack: 15, defense: 15 },
+  { id: 'master_dragon', name: '마스터 드래곤 잠수함', grade: 0, color: '#fb923c', trim: '#0f766e', glacial: true, recipe: { '수룡의 역광비늘': 1, '수룡의 불멸의 꼬리가시': 1, '수룡의 퇴화된 날개': 2, '수룡의 머리뼈+': 1 }, description: '진화한 수룡의 역광비늘과 꼬리가시로 만든 용 잠수함', ability: '방어 6배 · 공격 6배 · 길게 누르면 매우 긴 하이퍼 브레스', speed: 1, attack: 6, defense: 6 },
 ];
 export const gradeLabel = (sub: Submarine) => sub.grade > 0 ? `${sub.grade}등급` : '특별 잠수함';
 /** 빙하수 골짜기에 가 보기 전에는 특별 잠수함을 상점에 보이지 않습니다. */
