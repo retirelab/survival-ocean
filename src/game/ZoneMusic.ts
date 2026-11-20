@@ -16,6 +16,7 @@ export const ZONE_TRACKS = [
 /** 보스전 동안 구역 곡 대신 재생하는 곡 */
 export const BOSS_TRACKS = {
   helicoprion: 'serrated_mandibles.mp3',
+  mx3: 'mx3_battle.mp3',
   /** 열수분출공층에서 진화한 수룡과 싸우는 동안 */
   abyssDragon: 'the_sunken_throne.mp3',
 } as const;

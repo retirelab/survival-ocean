@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import type { GameAudio } from '../audio/GameAudio';
 import { advanceMX3Dialogue, damageMX3, MX3, MX3_CHOICES, MX3_INTRO, MX3_OUTRO, MX3_REWARDS,
   mx3MissileSpeed, newMX3, type MX3Save } from '../game/MX3';
+import { BOSS_TRACKS } from '../game/ZoneMusic';
 import { distanceToSegment } from '../game/SubmarineCombat';
 
 type Point = { x: number; y: number };
@@ -62,11 +63,13 @@ export class MX3Boss {
     this.subtitle = this.scene.add.text(0, 0, '', style).setDepth(72);
     this.options = [0, 1].map(() => this.scene.add.text(0, 0, '', { ...style, color: '#fef08a' }).setDepth(72));
     this.layout();
+    if (this.state.phase === 'fight') this.audio.setBossMusic(BOSS_TRACKS.mx3);
   }
 
   leave() {
     if (!this.active) return;
     this.active = false;
+    if (this.state.phase === 'fight') this.audio.setBossMusic(null);
     this.clearAttacks();
     for (const object of [this.art, this.effects, this.panel, this.prompt, this.subtitle, ...this.options]) object?.destroy();
     this.art = this.effects = this.panel = undefined;
@@ -196,6 +199,7 @@ export class MX3Boss {
     this.state = next;
     if (next.phase === 'fight') {
       this.cooldown = 1.4;
+      this.audio.setBossMusic(BOSS_TRACKS.mx3);
       this.host.notify('M-X 3 전투 시작!');
     }
     this.layout();
@@ -236,6 +240,7 @@ export class MX3Boss {
     this.state = damageMX3(this.state, amount);
     this.audio.playHit();
     if (this.state.phase === 'outro') {
+      this.audio.setBossMusic(null);
       this.clearAttacks();
       this.effects?.clear();
       this.host.stopInput();
