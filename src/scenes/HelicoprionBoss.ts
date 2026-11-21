@@ -623,7 +623,7 @@ export class HelicoprionBoss {
     if (!this.grip || !this.gripText) { this.gripText?.setVisible(false); return; }
     const { width, height } = this.scene.scale;
     this.gripText.setPosition(width / 2, height * 0.72).setVisible(true).setText(this.grip.kind === 'devour'
-      ? `포식! 발사 버튼 / Space 연타  ${this.grip.presses}/${H.escapePresses}`
+      ? `포식! 발사 / Space / Xbox X 연타  ${this.grip.presses}/${H.escapePresses}`
       : `소드 브레이크 · 기절 ${Math.ceil(this.grip.remaining * 10) / 10}초`);
   }
 

@@ -1,14 +1,18 @@
 // Button and axis indices of the browser's standard gamepad layout.
 export const PAD = {
-  a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, rt: 7, view: 8, menu: 9,
+  a: 0, b: 1, x: 2, y: 3, rb: 5, rt: 7, view: 8, menu: 9,
   up: 12, down: 13, left: 14, right: 15,
 } as const;
+const MENU_HOLD_MS = 500;
 
 export class GamepadControls {
   private pad?: Gamepad;
   private buttons = 0;
   private pressed = 0;
   private fireBlocked = false;
+  private menuHeldMs?: number;
+  menuTapped = false;
+  menuLongPressed = false;
   private navX = 0;
   private navY = 0;
   move = { x: 0, y: 0 };
@@ -16,7 +20,7 @@ export class GamepadControls {
   nav = { x: 0, y: 0 };
 
   /** Returns true when the previously active controller was disconnected or replaced. */
-  update(pads: ArrayLike<Gamepad | null>) {
+  update(pads: ArrayLike<Gamepad | null>, deltaMs = 0) {
     const previous = this.pad;
     const usable = (pad: Gamepad | null | undefined): pad is Gamepad => !!pad?.connected && pad.mapping === 'standard';
     const same = previous && pads[previous.index];
@@ -26,8 +30,12 @@ export class GamepadControls {
     this.buttons = this.pad?.buttons.reduce((mask, button, index) =>
       index < 16 && (button.pressed || button.value >= 0.5) ? mask | (1 << index) : mask, 0) ?? 0;
     this.pressed = this.buttons & ~previousButtons;
-    if (!this.down(PAD.rt)) this.fireBlocked = false;
-    if (disconnected) this.blockFire();
+    if (!this.down(PAD.x)) this.fireBlocked = false;
+    if (disconnected) {
+      this.blockFire();
+      this.cancelMenuPress();
+    }
+    this.updateMenuPress(deltaMs);
 
     const stickX = this.pad?.axes[0] ?? 0;
     const stickY = this.pad?.axes[1] ?? 0;
@@ -56,11 +64,29 @@ export class GamepadControls {
     return Math.abs(value) >= 0.65 ? Math.sign(value) : Math.abs(value) < 0.4 ? 0 : previous;
   }
 
+  private updateMenuPress(deltaMs: number) {
+    this.menuTapped = false;
+    this.menuLongPressed = false;
+    if (this.justPressed(PAD.menu)) {
+      this.menuHeldMs = 0;
+    } else if (this.menuHeldMs !== undefined) {
+      this.menuHeldMs += deltaMs;
+      this.menuLongPressed = this.menuHeldMs >= MENU_HOLD_MS;
+      this.menuTapped = !this.down(PAD.menu) && !this.menuLongPressed;
+      if (this.menuTapped || this.menuLongPressed) this.menuHeldMs = undefined;
+    }
+  }
+
+  cancelMenuPress() {
+    this.menuHeldMs = undefined;
+    this.menuTapped = this.menuLongPressed = false;
+  }
+
   down(button: number) { return (this.buttons & (1 << button)) !== 0; }
   justPressed(button: number) { return (this.pressed & (1 << button)) !== 0; }
-  get fireDown() { return !this.fireBlocked && this.down(PAD.rt); }
-  get firePressed() { return !this.fireBlocked && this.justPressed(PAD.rt); }
-  blockFire() { this.fireBlocked = this.down(PAD.rt); }
+  get fireDown() { return !this.fireBlocked && this.down(PAD.x); }
+  get firePressed() { return !this.fireBlocked && this.justPressed(PAD.x); }
+  blockFire() { this.fireBlocked = this.down(PAD.x); }
   consumePresses() {
     this.pressed = 0;
     this.nav = { x: 0, y: 0 };
@@ -69,7 +95,7 @@ export class GamepadControls {
 
 /** DOM dialogs remain controllable while the Phaser scene is paused. */
 export function controlGamepadDialog(pad: GamepadControls, dialog: HTMLElement, close: () => void) {
-  if (pad.justPressed(PAD.b) || pad.justPressed(PAD.menu)) { close(); return; }
+  if (pad.justPressed(PAD.b)) { close(); return; }
   const step = pad.nav.y || pad.nav.x;
   if (!step && !pad.justPressed(PAD.a)) return;
   const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));

@@ -811,6 +811,7 @@ export class OceanScene extends Phaser.Scene {
 
   private resetHeldInput() {
     this.gamepad.blockFire();
+    this.gamepad.cancelMenuPress();
     this.joyPointerId = null;
     this.joyVec = { x: 0, y: 0 };
     this.shootPointerId = null;
@@ -1175,7 +1176,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private updateAimingInput() {
-    const aimDown = Boolean(this.keyZ?.isDown) || this.gamepad.down(PAD.lb);
+    const aimDown = Boolean(this.keyZ?.isDown) || this.gamepad.down(PAD.rt);
     if (!aimDown) this.aimLockedUntilRelease = false;
     this.setAiming(this.touchAimEnabled || (aimDown && !this.aimLockedUntilRelease));
   }
@@ -1484,20 +1485,21 @@ export class OceanScene extends Phaser.Scene {
     }
   }
 
-  private pollGamepad() {
+  private pollGamepad(_time: number, deltaMs: number) {
     let pads: ArrayLike<Gamepad | null> = [];
     try {
       if (!document.hidden && document.hasFocus()) pads = navigator.getGamepads?.() ?? [];
     } catch {
       // An embedding page can deny access to gamepads.
     }
-    if (this.gamepad.update(pads) && !this.shootHolding && !this.keySpace?.isDown) {
+    if (this.gamepad.update(pads, deltaMs) && !this.shootHolding && !this.keySpace?.isDown) {
       // Unplugging the pad must not release a charged shot.
       this.fireHeld = 0;
       this.fireWasDown = false;
     }
     if (this.submarinePanel?.handleGamepad(this.gamepad) || this.pauseControls?.handleGamepad(this.gamepad)) {
       this.gamepad.consumePresses();
+      this.gamepad.cancelMenuPress();
     }
   }
 
@@ -3109,23 +3111,25 @@ export class OceanScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.gameClock += rawDt;
 
+    if (this.gamepad.justPressed(PAD.view)) {
+      this.pauseControls?.pause();
+      return;
+    }
     if (this.menuMode) {
+      this.gamepad.cancelMenuPress();
       this.updateGamepadMenu();
       this.updateMenuKeyboard();
       return;
     }
 
-    if (this.gamepad.justPressed(PAD.menu)) {
-      this.pauseControls?.pause();
-      return;
-    }
-    if (this.gamepad.justPressed(PAD.view) && this.submarinePanel?.show()) return;
+    if (this.gamepad.menuTapped && this.submarinePanel?.show()) return;
     if (this.mx3Boss.talking) {
       this.gamepad.blockFire();
+      this.gamepad.cancelMenuPress();
       if (this.mx3Boss.choosing) {
         if (this.gamepad.justPressed(PAD.a) || (this.keyNumbers[0] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[0]))) this.mx3Boss.advance(0);
         else if (this.gamepad.justPressed(PAD.b) || (this.keyNumbers[1] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[1]))) this.mx3Boss.advance(1);
-      } else if (this.gamepad.justPressed(PAD.a) || this.gamepad.justPressed(PAD.b) || (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF))) {
+      } else if (this.gamepad.justPressed(PAD.a) || (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF))) {
         this.mx3Boss.advance();
       }
       return;
@@ -3264,12 +3268,12 @@ export class OceanScene extends Phaser.Scene {
     if (!heldByHelicoprion) {
       if (this.gamepad.firePressed || (this.gamepad.fireDown && this.autoFireEnabled && this.shootCooldown <= 0)) this.fireBullet();
       if (this.gamepad.justPressed(PAD.rb)) this.tryElectricShock();
-      if (this.gamepad.justPressed(PAD.b)) {
+      if (this.gamepad.justPressed(PAD.a)) {
         this.tryCollectNearbyFish();
         if (this.mx3Boss.talking) return;
       }
-      if (this.gamepad.justPressed(PAD.y)) this.emptyBagToTank();
-      if (this.gamepad.justPressed(PAD.x)) {
+      if (this.gamepad.menuLongPressed) this.emptyBagToTank();
+      if (this.gamepad.justPressed(PAD.y)) {
         if (this.harvestBtnBg.visible) this.tryHarvest();
         else if (this.mineBtnBg.visible) this.tryMineNearbyOre();
       }

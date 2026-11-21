@@ -138,7 +138,7 @@ export class MX3Boss {
       this.prompt.setVisible(true).setText(`M-X 3  ·  ${Math.ceil(this.state.hp)} / ${MX3.hp}`).setPosition(width / 2, Math.min(145, height * .24));
     } else if (this.state.phase === 'idle' && this.nearSubmarine()) {
       const { y, ry } = this.hull();
-      this.prompt.setVisible(true).setText('F / 수집 / Xbox B · 엿듣기').setPosition(width / 2, y - ry - 35);
+      this.prompt.setVisible(true).setText('F / 수집 / Xbox A · 엿듣기').setPosition(width / 2, y - ry - 35);
     } else {
       this.prompt.setVisible(false);
     }

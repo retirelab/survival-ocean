@@ -21,9 +21,12 @@ test('Xbox movement has a dead zone, D-pad diagonals are normalized, and aiming 
   assert.deepEqual(pad.nav, { x: 0, y: 0 });
 });
 
-test('the right trigger supports tap and hold, and reset or hot unplug cancels a held trigger', () => {
+test('RT aims, while X supports firing on tap and hold and cancels on reset or unplug', () => {
   const pad = new GamepadControls();
-  const held = controller({ buttons: { [PAD.rt]: 0.75, [PAD.a]: 1 } });
+  pad.update([controller({ buttons: { [PAD.rt]: 0.75 } })]);
+  assert.equal(pad.down(PAD.rt), true);
+  assert.equal(pad.fireDown, false);
+  const held = controller({ buttons: { [PAD.x]: 1, [PAD.a]: 1 } });
   pad.update([held]);
   assert.equal(pad.firePressed, true);
   assert.equal(pad.justPressed(PAD.a), true);
@@ -38,6 +41,32 @@ test('the right trigger supports tap and hold, and reset or hot unplug cancels a
   assert.equal(pad.update([null]), true);
   assert.equal(pad.fireDown, false);
   assert.equal(pad.update([null]), false);
+});
+
+test('Menu taps and half-second holds are exclusive and cannot fire on disconnect or cancellation', () => {
+  const pad = new GamepadControls();
+  const idle = controller();
+  const held = controller({ buttons: { [PAD.menu]: 1 } });
+  pad.update([held], 16);
+  pad.update([idle], 120);
+  assert.equal(pad.menuTapped, true);
+  assert.equal(pad.menuLongPressed, false);
+  pad.update([held], 16);
+  pad.update([held], 499);
+  assert.equal(pad.menuLongPressed, false);
+  pad.update([held], 1);
+  assert.equal(pad.menuLongPressed, true);
+  pad.update([held], 200);
+  assert.equal(pad.menuLongPressed, false);
+  pad.update([idle], 16);
+  assert.equal(pad.menuTapped, false);
+  pad.update([held], 16);
+  pad.update([null], 16);
+  assert.equal(pad.menuTapped, false);
+  pad.update([held], 16);
+  pad.cancelMenuPress();
+  pad.update([idle], 16);
+  assert.equal(pad.menuTapped, false);
 });
 
 test('paused dialogs move focus, confirm once per press, and support closing with B', () => {
