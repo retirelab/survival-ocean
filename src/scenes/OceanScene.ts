@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
 import { GamepadControls, PAD } from '../game/GamepadControls';
+import { BagAquarium } from '../game/BagAquarium';
 import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, holdWeapon, shipAttack, voltChargeLevel, sawBoost, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
@@ -357,6 +358,7 @@ export class OceanScene extends Phaser.Scene {
   };
 
   private pauseControls?: PauseControls;
+  private bagAquarium?: BagAquarium;
   private savedGame = readSave();
 
   private spawnTimer = 0;
@@ -625,6 +627,14 @@ export class OceanScene extends Phaser.Scene {
       select: id => this.selectSubmarine(id),
     });
     this.submarinePanel.setGlacialVisited(this.maxLevelExpanded);
+    this.bagAquarium = new BagAquarium({
+      open: () => this.pauseControls?.openOverlay() ?? false,
+      close: () => this.pauseControls?.closeOverlay(),
+      empty: () => this.emptyBagToTank(),
+      bag: () => this.bag,
+      capacity: this.maxBag,
+      art: name => this.bagFishArt(name),
+    });
     this.breathGraphics = this.add.graphics().setDepth(8);
     this.armorGraphics = this.add.graphics().setDepth(11);
     this.createControls();
@@ -639,6 +649,7 @@ export class OceanScene extends Phaser.Scene {
       this.input.keyboard?.off('keydown', unlockAudio);
       this.game.events.off(Phaser.Core.Events.PRE_STEP, this.pollGamepad, this);
       this.mx3Boss.leave();
+      this.bagAquarium?.destroy();
       this.submarinePanel?.destroy();
       this.pauseControls?.destroy();
       this.scale.off('resize', onResize);
@@ -1056,6 +1067,8 @@ export class OceanScene extends Phaser.Scene {
         if (Phaser.Math.Distance.Between(px, py, this.shootBtnBg.x, this.shootBtnBg.y) <= 48) this.helicoprion.escapePress();
         return;
       }
+
+      if (this.bagText.getBounds().contains(px, py) && this.bagAquarium?.show()) return;
 
       if (this.shockBtnBg.visible && Phaser.Math.Distance.Between(px, py, this.shockBtnBg.x, this.shockBtnBg.y) <= 34) {
         this.tryElectricShock();
@@ -1497,7 +1510,9 @@ export class OceanScene extends Phaser.Scene {
       this.fireHeld = 0;
       this.fireWasDown = false;
     }
-    if (this.submarinePanel?.handleGamepad(this.gamepad) || this.pauseControls?.handleGamepad(this.gamepad)) {
+    if (this.bagAquarium?.handleGamepad(this.gamepad)) {
+      this.gamepad.consumePresses();
+    } else if (this.submarinePanel?.handleGamepad(this.gamepad) || this.pauseControls?.handleGamepad(this.gamepad)) {
       this.gamepad.consumePresses();
       this.gamepad.cancelMenuPress();
     }
@@ -2082,6 +2097,16 @@ export class OceanScene extends Phaser.Scene {
     }
   }
 
+  private bagFishArt(name: string) {
+    const spec = [...SHALLOW_FISH, ...MID_FISH, ...DEEP_FISH, ...GLACIAL_FISH, ...UNDERWORLD_2F_FISH]
+      .find(fish => fish.name === name);
+    if (!spec || !this.textures.exists(spec.key)) return;
+    const image = this.textures.get(spec.key).getSourceImage();
+    if (image instanceof HTMLImageElement) {
+      return { src: image.currentSrc || image.src, facesLeft: this.fishArtworkFacesLeft(spec) };
+    }
+  }
+
   private emptyBagToTank() {
     if (this.bag.length === 0) {
       this.audio.playDenied();
@@ -2548,10 +2573,13 @@ export class OceanScene extends Phaser.Scene {
     });
   }
 
+  private fishArtworkFacesLeft(spec: FishSpec) {
+    return Boolean(spec.facesLeft) || spec.key === 'red_seabream' || spec.key === 'rock_bream';
+  }
+
   private setFishFacing(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse, spec: FishSpec, movingRight: boolean) {
     if (!('setFlipX' in sprite)) return;
-    const artworkFacesLeft = spec.facesLeft || spec.key === 'red_seabream' || spec.key === 'rock_bream';
-    sprite.setFlipX(artworkFacesLeft ? movingRight : !movingRight);
+    sprite.setFlipX(this.fishArtworkFacesLeft(spec) ? movingRight : !movingRight);
   }
 
   /** 공격 1회 피해: 기본 피해 × 강화 배율 × 잠수함 공격 배율 */
@@ -3134,6 +3162,8 @@ export class OceanScene extends Phaser.Scene {
       }
       return;
     }
+
+    if (!this.helicoprion.holdingPlayer && this.gamepad.justPressed(PAD.lt) && this.bagAquarium?.show()) return;
 
     if (this.helicoprion.holdingPlayer && (this.gamepad.firePressed || (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)))) {
       this.helicoprion.escapePress();

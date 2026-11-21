@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { OceanScene } from './scenes/OceanScene';
+import './game/BagAquarium.css';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
