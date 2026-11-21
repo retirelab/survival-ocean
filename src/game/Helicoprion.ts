@@ -10,6 +10,7 @@ export const HELICOPRION = {
   swordTickDamage: 15,
   swordFinalDamage: 65,
   swordSpeed: 2600,
+  swordRushes: 3,
   swordWaitMin: 0.35,
   swordWaitMax: 2.15,
   spinWindup: 0.22,

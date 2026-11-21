@@ -62,6 +62,7 @@ export class HelicoprionBoss {
   private waves: Array<Point & { angle: number; life: number }> = [];
   private skillDash?: { dx: number; dy: number; remaining: number };
   private swordSide = 1;
+  private swordRushesRemaining = 0;
   private swordAmbush?: { angle: number; target: Point };
   private comboLean = 0;
   private comboSlashes: Phaser.GameObjects.Graphics[] = [];
@@ -399,6 +400,7 @@ export class HelicoprionBoss {
 
   private startSpecial(pattern: Exclude<HelicoprionMove, 'charge' | 'normal'>, p: Point) {
     if (pattern === 'sword') {
+      this.swordRushesRemaining = H.swordRushes;
       const { width } = this.scene.scale;
       this.swordSide = p.x > width / 2 ? -1 : 1;
       this.heading = this.swordSide === 1 ? 0 : Math.PI;
@@ -501,21 +503,24 @@ export class HelicoprionBoss {
     const goal = this.swordOffscreenX();
     this.x += Phaser.Math.Clamp(goal - this.x, -1060 * dt, 1060 * dt);
     this.applyTransform();
-    if (Math.abs(goal - this.x) <= 0.1) {
-      this.container?.setVisible(false);
-      const { width, height } = this.scene.scale;
-      const p = this.host.player();
-      const { angle, delay } = randomSwordAmbush();
-      // Commit once hidden. The player can move before the strike crosses this point.
-      this.swordAmbush = { angle, target: { x: p.x / width, y: p.y / height } };
-      this.setPhase('swordWait', delay);
-    }
+    if (Math.abs(goal - this.x) <= 0.1) this.waitForSwordDash();
+  }
+
+  private waitForSwordDash() {
+    this.container?.setVisible(false);
+    const { width, height } = this.scene.scale;
+    const p = this.host.player();
+    const { angle, delay } = randomSwordAmbush();
+    // Each rush commits to a new target and direction while the boss is hidden.
+    this.swordAmbush = { angle, target: { x: p.x / width, y: p.y / height } };
+    this.setPhase('swordWait', delay);
   }
 
   private beginSwordDash() {
     const ambush = this.swordAmbush;
     this.swordAmbush = undefined;
     if (!ambush) { this.container?.setVisible(true); this.setPhase('recover', 1); return; }
+    this.swordRushesRemaining -= 1;
     const { width, height } = this.scene.scale;
     const path = swordDashPath({ x: ambush.target.x * width, y: ambush.target.y * height },
       ambush.angle, width, height, this.displayWidth * 0.65);
@@ -548,11 +553,16 @@ export class HelicoprionBoss {
       this.skillDash = undefined;
       this.clampPosition();
       this.applyTransform();
+      if (kind === 'sword') this.swordRushesRemaining = 0;
       this.beginGrip(kind);
       return;
     }
     if (dash.remaining <= 0) {
       this.skillDash = undefined;
+      if (kind === 'sword' && this.swordRushesRemaining > 0) {
+        this.waitForSwordDash();
+        return;
+      }
       this.clampPosition();
       this.applyTransform();
       this.setPhase('recover', kind === 'sword' ? 1.4 : 0.85);
@@ -677,6 +687,7 @@ export class HelicoprionBoss {
     this.waves = [];
     this.skillDash = undefined;
     this.swordAmbush = undefined;
+    this.swordRushesRemaining = 0;
     this.grip = undefined;
     this.followUps = [];
     for (const effect of this.comboSlashes) {
