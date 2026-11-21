@@ -282,6 +282,9 @@ export class HelicoprionBoss {
         break;
       case 'swordWait':
         if (this.phaseTimer <= 0) this.beginSwordDash();
+        else if (this.phaseTimer > H.swordAimLockSeconds && this.swordAmbush) {
+          this.swordAmbush.target = this.swordTarget();
+        }
         break;
       case 'grip':
         this.updateGrip(dt);
@@ -506,13 +509,16 @@ export class HelicoprionBoss {
     if (Math.abs(goal - this.x) <= 0.1) this.waitForSwordDash();
   }
 
-  private waitForSwordDash() {
-    this.container?.setVisible(false);
+  private swordTarget(): Point {
     const { width, height } = this.scene.scale;
     const p = this.host.player();
+    return { x: p.x / width, y: p.y / height };
+  }
+
+  private waitForSwordDash() {
+    this.container?.setVisible(false);
     const { angle, delay } = randomSwordAmbush();
-    // Each rush commits to a new target and direction while the boss is hidden.
-    this.swordAmbush = { angle, target: { x: p.x / width, y: p.y / height } };
+    this.swordAmbush = { angle, target: this.swordTarget() };
     this.setPhase('swordWait', delay);
   }
 
@@ -544,9 +550,12 @@ export class HelicoprionBoss {
     dash.remaining -= step;
     this.applyTransform();
     const head = this.headPoint();
-    if (kind === 'sword') this.skillArt?.lineStyle(13, 0xea7be9, 0.72).lineBetween(before.x, before.y, head.x, head.y);
+    if (kind === 'sword') this.skillArt?.lineStyle(19, 0xea7be9, 0.72).lineBetween(before.x, before.y, head.x, head.y);
     const p = this.host.player();
-    if (segmentPointDistance(p.x, p.y, before.x, before.y, head.x, head.y) <= this.displayWidth * 0.08 + 16) {
+    const hitRadius = kind === 'sword'
+      ? this.displayWidth * H.swordReachScale + H.swordReachPadding
+      : this.displayWidth * 0.08 + 16;
+    if (segmentPointDistance(p.x, p.y, before.x, before.y, head.x, head.y) <= hitRadius) {
       const passed = Phaser.Math.Clamp((head.x - p.x) * dash.dx + (head.y - p.y) * dash.dy, 0, step);
       this.x -= passed * dash.dx;
       this.y -= passed * dash.dy;
