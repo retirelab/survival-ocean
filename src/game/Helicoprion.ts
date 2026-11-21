@@ -1,7 +1,15 @@
 /** 헬리코프리온 보스전의 수치와 순수 계산 로직. 화면 표시는 scenes/HelicoprionBoss.ts가 담당합니다. */
 
 export const HELICOPRION = {
-  maxHp: 2000,
+  maxHp: 6000,
+  escapePresses: 8,
+  devourSeconds: 3.4,
+  swordStunSeconds: 2.25,
+  comboTick: 0.32,
+  devourTickDamage: 12,
+  swordTickDamage: 15,
+  swordFinalDamage: 65,
+  swordSpeed: 2600,
   attack: 30,
   bombDamage: 500,
   /** 이 거리(px)보다 멀면 돌진, 가까우면 아래턱 휘두르기 */
@@ -55,6 +63,7 @@ export type HelicoprionStatus = 'alive' | 'dead' | 'respawning';
 
 export interface HelicoprionSave {
   hp: number;
+  maxHp?: typeof HELICOPRION.maxHp;
   /** 0보다 크면 부활까지 남은 초 */
   respawn: number;
   /** 사체에서 갈무리한 횟수. hp 0·respawn 0이면 회색 사체로 남아 있습니다. 예전 저장에는 없습니다. */
@@ -64,7 +73,41 @@ export interface HelicoprionSave {
 }
 
 export function newHelicoprion(): HelicoprionSave {
-  return { hp: HELICOPRION.maxHp, respawn: 0, harvests: 0, bombs: BOMB_SPOTS.map(() => 0) };
+  return { hp: HELICOPRION.maxHp, maxHp: HELICOPRION.maxHp, respawn: 0, harvests: 0, bombs: BOMB_SPOTS.map(() => 0) };
+}
+
+const LEGACY_MAX_HP = 2000;
+
+export function restoreHelicoprion(save?: HelicoprionSave): HelicoprionSave {
+  if (!save) return newHelicoprion();
+  const hp = save.maxHp === undefined ? save.hp * HELICOPRION.maxHp / LEGACY_MAX_HP : save.hp;
+  return { ...save, hp, maxHp: HELICOPRION.maxHp, harvests: save.harvests ?? 0, bombs: [...save.bombs] };
+}
+
+export type GripKind = 'devour' | 'sword';
+export interface HelicoprionGrip { kind: GripKind; remaining: number; untilCut: number; presses: number }
+
+export function newHelicoprionGrip(kind: GripKind): HelicoprionGrip {
+  return { kind, remaining: kind === 'devour' ? HELICOPRION.devourSeconds : HELICOPRION.swordStunSeconds, untilCut: HELICOPRION.comboTick, presses: 0 };
+}
+
+/** Each call represents a new press. A held button and the ultimate stun cannot grant escapes. */
+export function pressHelicoprionEscape(grip: HelicoprionGrip): boolean {
+  if (grip.kind !== 'devour' || grip.remaining <= 0) return false;
+  grip.presses += 1;
+  return grip.presses >= HELICOPRION.escapePresses;
+}
+
+export function tickHelicoprionGrip(grip: HelicoprionGrip, dt: number) {
+  const elapsed = Math.min(dt, grip.remaining);
+  grip.remaining -= elapsed;
+  grip.untilCut -= elapsed;
+  let cuts = 0;
+  while (grip.untilCut <= 1e-9) {
+    cuts += 1;
+    grip.untilCut += HELICOPRION.comboTick;
+  }
+  return { cuts, finished: grip.remaining <= 0, finalSlash: grip.remaining <= 0 && grip.kind === 'sword' };
 }
 
 export function helicoprionStatus(save: HelicoprionSave): HelicoprionStatus {
@@ -93,7 +136,8 @@ export function isHelicoprionSave(value: unknown): value is HelicoprionSave {
   const v = value as Record<string, unknown>;
   const finite = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
   if (v.harvests !== undefined && !(Number.isInteger(v.harvests) && finite(v.harvests, 0, HELICOPRION.harvestCount - 1))) return false;
-  return finite(v.hp, 0, HELICOPRION.maxHp) && finite(v.respawn, 0, HELICOPRION.respawnSeconds) &&
+  if (v.maxHp !== undefined && v.maxHp !== HELICOPRION.maxHp) return false;
+  return finite(v.hp, 0, v.maxHp ?? LEGACY_MAX_HP) && finite(v.respawn, 0, HELICOPRION.respawnSeconds) &&
     Array.isArray(v.bombs) && v.bombs.length === BOMB_SPOTS.length &&
     v.bombs.every(t => finite(t, 0, HELICOPRION.bombRespawnSeconds));
 }

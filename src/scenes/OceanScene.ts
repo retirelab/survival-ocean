@@ -359,6 +359,7 @@ export class OceanScene extends Phaser.Scene {
   private shootCooldown = 0;
   private armorRemaining = 0;
   private playerParalysis = 0;
+  private helicoprionKnockback?: { dx: number; dy: number; remaining: number };
   private shockCooldown = 0;
   private shockBtnBg!: Phaser.GameObjects.Arc;
   private shockBtnText!: Phaser.GameObjects.Text;
@@ -536,7 +537,9 @@ export class OceanScene extends Phaser.Scene {
 
     this.helicoprion = new HelicoprionBoss(this, this.audio, {
       player: () => ({ x: this.player.x, y: this.player.y }),
-      damagePlayer: (amount, attacker) => this.damagePlayer(amount, attacker),
+      damagePlayer: (amount, attacker, combo) => { this.damagePlayer(amount, attacker, false, combo); },
+      interruptInput: () => this.resetHeldInput(),
+      knockPlayer: (dx, dy) => { this.helicoprionKnockback = { dx, dy, remaining: 0.26 }; },
       showNotice: message => this.showNotice(message),
       setHarvestButton: visible => {
         this.harvestBtnBg.setVisible(visible);
@@ -1040,6 +1043,10 @@ export class OceanScene extends Phaser.Scene {
       }
 
       if (this.mx3Boss.handlePointer(px, py, Phaser.Math.Distance.Between(px, py, this.collectBtnBg.x, this.collectBtnBg.y) <= 38)) return;
+      if (this.helicoprion.holdingPlayer) {
+        if (Phaser.Math.Distance.Between(px, py, this.shootBtnBg.x, this.shootBtnBg.y) <= 48) this.helicoprion.escapePress();
+        return;
+      }
 
       if (this.shockBtnBg.visible && Phaser.Math.Distance.Between(px, py, this.shockBtnBg.x, this.shockBtnBg.y) <= 34) {
         this.tryElectricShock();
@@ -2505,6 +2512,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private fireBullet() {
+    if (this.helicoprion.holdingPlayer) return;
     const ship = this.fleet.equipped;
     // 브레스·화염방사·차지·대시는 발사 버튼을 누르고 떼는 동작으로 update에서 처리합니다.
     if (holdWeapon(ship) || ship === 'mega_voltage' || ship === 'sword_crusher') { this.releaseAimAfterShot(); return; }
@@ -2619,6 +2627,7 @@ export class OceanScene extends Phaser.Scene {
     this.fireWasDown = fireDown;
     this.dashCooldown = Math.max(0, this.dashCooldown - rawDt);
     this.breathGraphics.clear();
+    if (this.helicoprion.holdingPlayer) return;
     this.breathDamageTimer = Math.max(0, this.breathDamageTimer - dt);
 
     if (ship === 'rainbow') {
@@ -2957,7 +2966,10 @@ export class OceanScene extends Phaser.Scene {
   private changeZone(nextIndex: number, spawnY: number, playSound = true) {
     const previousZoneIndex = this.zoneIndex;
     if (previousZoneIndex === DRAGON_ZONE_INDEX) this.setDragonZoneVisibility(false);
-    if (previousZoneIndex === NEST_ZONE_INDEX) this.helicoprion.leave();
+    if (previousZoneIndex === NEST_ZONE_INDEX) {
+      this.helicoprion.leave();
+      this.helicoprionKnockback = undefined;
+    }
     if (previousZoneIndex === ABYSS_ZONE_INDEX) this.abyssDragon.leave();
     if (previousZoneIndex === MX3_ZONE_INDEX) this.mx3Boss.leave();
     for (const f of this.fishList) {
@@ -3056,7 +3068,11 @@ export class OceanScene extends Phaser.Scene {
       return;
     }
 
-    this.updateAimingInput();
+    if (this.helicoprion.holdingPlayer && this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+      this.helicoprion.escapePress();
+    }
+    const heldByHelicoprion = this.helicoprion.holdingPlayer;
+    if (!heldByHelicoprion) this.updateAimingInput();
     const dt = rawDt * (this.aiming ? 0.25 : 1);
     this.armorRemaining = Math.max(0, this.armorRemaining - rawDt);
     const moveDt = Math.max(0, rawDt - this.playerParalysis) * (this.aiming ? 0.25 : 1);
@@ -3132,7 +3148,17 @@ export class OceanScene extends Phaser.Scene {
 
     const previousPlayerX = this.player.x;
     const previousPlayerY = this.player.y;
-    if (!this.aiming) {
+    const knockback = this.helicoprionKnockback;
+    if (knockback) {
+      const step = Math.min(rawDt, knockback.remaining);
+      const before = knockback.remaining / 0.26;
+      knockback.remaining -= step;
+      const after = knockback.remaining / 0.26;
+      const fraction = before ** 2 - after ** 2;
+      this.player.x = Phaser.Math.Clamp(this.player.x + knockback.dx * fraction, 30, width - 30);
+      this.player.y = Phaser.Math.Clamp(this.player.y + knockback.dy * fraction, 30, height - 24);
+      if (knockback.remaining <= 0) this.helicoprionKnockback = undefined;
+    } else if (!this.aiming && !heldByHelicoprion) {
       const dx = vx * this.speed * moveDt;
       const dy = vy * this.speed * moveDt;
       const passage = !!GLACIAL_PASSAGE_WALLS[this.zoneIndex];
@@ -3148,7 +3174,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.zoneIndex === ABYSS_ZONE_INDEX && this.abyssDragon.blocksPlayer(this.player.x, this.player.y)) {
       this.player.setPosition(previousPlayerX, previousPlayerY);
     }
-    this.updateSawContact(previousPlayerX, previousPlayerY);
+    if (!heldByHelicoprion && !knockback) this.updateSawContact(previousPlayerX, previousPlayerY);
     this.drawAimGuide();
     this.updateMiningInteraction();
 
@@ -3160,14 +3186,14 @@ export class OceanScene extends Phaser.Scene {
       this.player.scaleX = 1;
     }
 
-    if (this.keySpace) {
+    if (!heldByHelicoprion && this.keySpace) {
       if (this.autoFireEnabled && this.keySpace.isDown && this.shootCooldown <= 0) {
         this.fireBullet();
       } else if (!this.autoFireEnabled && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
         this.fireBullet();
       }
     }
-    if (this.keyB && Phaser.Input.Keyboard.JustDown(this.keyB)) this.tryElectricShock();
+    if (!heldByHelicoprion && this.keyB && Phaser.Input.Keyboard.JustDown(this.keyB)) this.tryElectricShock();
     if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
       this.tryCollectNearbyFish();
       if (this.mx3Boss.talking) return;
@@ -3240,7 +3266,7 @@ export class OceanScene extends Phaser.Scene {
     const zoneBeforeBoss = this.zoneIndex;
     this.updateDragon(dt);
     if (this.zoneIndex !== zoneBeforeBoss) return;
-    this.helicoprion.update(dt);
+    this.helicoprion.update(heldByHelicoprion ? rawDt : dt);
     // 보스 공격으로 쓰러지면 초심층으로 이동하므로 이번 프레임은 여기서 끝냅니다.
     if (this.zoneIndex !== zoneBeforeBoss) return;
     this.abyssDragon.update(dt);

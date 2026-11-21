@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HELICOPRION, HELICOPRION_HARVEST_REWARDS, BOMB_SPOTS, chooseAttack, harvestHelicoprion, helicoprionStatus, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave,
+  HELICOPRION, HELICOPRION_HARVEST_REWARDS, BOMB_SPOTS, chooseAttack, harvestHelicoprion, helicoprionStatus, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave, restoreHelicoprion, newHelicoprionGrip, pressHelicoprionEscape, tickHelicoprionGrip,
 } from '../.test-build/Helicoprion.js';
 
 test('boss numbers follow the design', () => {
-  assert.equal(HELICOPRION.maxHp, 2000);
+  assert.equal(HELICOPRION.maxHp, 6000);
   assert.equal(HELICOPRION.attack, 30);
   assert.equal(HELICOPRION.bombDamage, 500);
   assert.equal(BOMB_SPOTS.length, 4);
-  assert.deepEqual(newHelicoprion(), { hp: 2000, respawn: 0, harvests: 0, bombs: [0, 0, 0, 0] });
+  assert.deepEqual(newHelicoprion(), { hp: 6000, maxHp: 6000, respawn: 0, harvests: 0, bombs: [0, 0, 0, 0] });
   assert.equal(isHelicoprionSave(newHelicoprion()), true);
 });
 
@@ -69,4 +69,32 @@ test('a living or respawning boss cannot be harvested and harvest progress is va
   // 예전 저장(harvests 없음)도 그대로 읽습니다.
   assert.equal(isHelicoprionSave({ hp: 0, respawn: 0, bombs: [0, 0, 0, 0] }), true);
   for (const harvests of [5, -1, 1.5]) assert.equal(isHelicoprionSave({ ...halfway, harvests }), false);
+});
+
+
+test('old saves preserve the percentage of health and never revive a corpse', () => {
+  const old = { hp: 1200, respawn: 0, bombs: [0, 7, 0, 0] };
+  const loaded = restoreHelicoprion(old);
+  assert.equal(loaded.hp, 3600);
+  assert.equal(loaded.maxHp, 6000);
+  assert.deepEqual(loaded.bombs, old.bombs);
+  assert.deepEqual(restoreHelicoprion(loaded), loaded);
+  assert.equal(restoreHelicoprion({ ...old, hp: 0, harvests: 2 }).hp, 0);
+  assert.equal(isHelicoprionSave({ ...loaded, hp: 6001 }), false);
+});
+
+test('devour requires eight presses, while Sword Break stun ends in one finishing slash', () => {
+  const devour = newHelicoprionGrip('devour');
+  assert.equal(tickHelicoprionGrip(devour, 0.95).cuts, 2);
+  for (let i = 0; i < 7; i++) assert.equal(pressHelicoprionEscape(devour), false);
+  assert.equal(pressHelicoprionEscape(devour), true);
+  const finished = tickHelicoprionGrip(devour, 8);
+  assert.equal(finished.finished, true);
+  assert.equal(finished.finalSlash, false);
+  assert.equal(pressHelicoprionEscape(devour), false);
+
+  const sword = newHelicoprionGrip('sword');
+  for (let i = 0; i < 12; i++) assert.equal(pressHelicoprionEscape(sword), false);
+  assert.deepEqual(tickHelicoprionGrip(sword, 0.65), { cuts: 2, finished: false, finalSlash: false });
+  assert.deepEqual(tickHelicoprionGrip(sword, 3), { cuts: 5, finished: true, finalSlash: true });
 });

@@ -4,13 +4,15 @@ import { BOSS_TRACKS } from '../game/ZoneMusic';
 import {
   BOMB_SPOTS, HELICOPRION as H, NEST_ENTRANCE, NEST_HILLS,
   bombHitDuringCharge, chooseAttack, distanceToBounds, harvestHelicoprion, helicoprionStatus, newHelicoprion,
-  segmentPointDistance, tickBombs,
-  type HelicoprionSave,
+  segmentPointDistance, tickBombs, restoreHelicoprion, newHelicoprionGrip, pressHelicoprionEscape, tickHelicoprionGrip,
+  type GripKind, type HelicoprionGrip, type HelicoprionSave,
 } from '../game/Helicoprion';
 
 export interface HelicoprionHost {
   player(): { x: number; y: number };
-  damagePlayer(amount: number, attacker: string): void;
+  damagePlayer(amount: number, attacker: string, combo?: boolean): void;
+  interruptInput(): void;
+  knockPlayer(dx: number, dy: number): void;
   showNotice(message: string): void;
   setHarvestButton(visible: boolean): void;
   addLoot(item: string): void;
@@ -23,7 +25,12 @@ const LOOT_ICONS: Record<string, string> = {
   '낡은 고대의 편지': '📜',
 };
 
-type Phase = 'idle' | 'chargeWindup' | 'charging' | 'jawWindup' | 'recover' | 'stunned';
+type Phase = 'idle' | 'chargeWindup' | 'charging' | 'jawWindup' | 'recover' | 'stunned'
+  | 'waves' | 'devourWindup' | 'devourDash' | 'spinWindup' | 'spinning' | 'swordExit' | 'swordWait' | 'swordDash' | 'grip';
+type Point = { x: number; y: number };
+const PATTERNS = ['normal', 'waves', 'normal', 'devour', 'spin', 'sword'] as const;
+const WAVE_INTERVAL = 0.17;
+const SPIN_SECONDS = 0.72;
 
 // 원본 이미지(1000×406) 기준 아래턱 회전축과 아래턱 이미지 안의 회전축 위치
 const SOURCE_WIDTH = 1000;
@@ -49,7 +56,16 @@ export class HelicoprionBoss {
   private heading = Math.PI;
   private displayWidth = 300;
   private charge?: { dx: number; dy: number; remaining: number; hitPlayer: boolean };
-  private jawTarget?: { x: number; y: number };
+  private jawTarget?: Point;
+  private pattern = 0;
+  private wavesFired = 0;
+  private waves: Array<Point & { angle: number; life: number }> = [];
+  private skillDash?: { dx: number; dy: number; remaining: number };
+  private swordSide = 1;
+  private spinHit = false;
+  private grip?: HelicoprionGrip;
+  private skillArt?: Phaser.GameObjects.Graphics;
+  private gripText?: Phaser.GameObjects.Text;
 
   private container?: Phaser.GameObjects.Container;
   private jaw?: Phaser.GameObjects.Image;
@@ -101,15 +117,25 @@ export class HelicoprionBoss {
   ) {}
 
   load(save: HelicoprionSave | undefined) {
-    this.state = save ? { ...save, harvests: save.harvests ?? 0, bombs: [...save.bombs] } : newHelicoprion();
+    this.state = restoreHelicoprion(save);
   }
 
   snapshot(): HelicoprionSave {
-    return { hp: this.state.hp, respawn: this.state.respawn, harvests: this.state.harvests ?? 0, bombs: [...this.state.bombs] };
+    return { ...this.state, bombs: [...this.state.bombs] };
   }
 
   get fighting() {
     return this.active && this.state.respawn <= 0 && this.state.hp > 0;
+  }
+
+  get holdingPlayer() { return this.fighting && this.grip !== undefined; }
+
+  escapePress() {
+    if (!this.holdingPlayer || !this.grip) return;
+    if (pressHelicoprionEscape(this.grip)) {
+      this.releaseGrip();
+      this.host.showNotice('아래턱에서 빠져나왔어요!');
+    } else this.drawGrip();
   }
 
   /** 둥지 입장. 헬리코프리온이 살아 있으면 바로 보스전과 보스 BGM이 시작됩니다. */
@@ -121,6 +147,11 @@ export class HelicoprionBoss {
       fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
       backgroundColor: 'rgba(220, 38, 38, 0.9)', padding: { x: 8, y: 4 },
     }).setOrigin(0.5).setDepth(9).setVisible(false);
+    this.skillArt = this.scene.add.graphics().setDepth(10);
+    this.gripText = this.scene.add.text(0, 0, '', {
+      fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center',
+      backgroundColor: '#3f1848', padding: { x: 9, y: 6 },
+    }).setOrigin(0.5).setDepth(44).setVisible(false);
     this.bar = this.scene.add.graphics().setDepth(31);
     this.barText = this.scene.add.text(0, 0, '', { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' })
       .setOrigin(0.5).setDepth(32);
@@ -140,19 +171,23 @@ export class HelicoprionBoss {
     this.active = false;
     this.audio.setBossMusic(null);
     this.host.setHarvestButton(false);
+    this.resetSkills();
     this.destroyBossSprite();
     for (const bomb of this.bombs) bomb.destroy();
     this.bombs = [];
-    for (const object of [this.danger, this.dangerText, this.bar, this.barText, this.respawnText, this.corpseText]) object?.destroy();
+    for (const object of [this.danger, this.dangerText, this.bar, this.barText, this.respawnText, this.corpseText, this.skillArt, this.gripText]) object?.destroy();
     this.danger = this.dangerText = this.bar = this.barText = this.respawnText = this.corpseText = undefined;
-    this.charge = undefined;
+    this.charge = this.jawTarget = undefined;
+    this.skillArt = this.gripText = undefined;
   }
 
   layout(width: number, height: number) {
     if (!this.active) return;
     this.displayWidth = Phaser.Math.Clamp(width * 0.36, 180, 340);
-    this.clampPosition();
+    if (this.phase === 'swordWait') this.x = this.swordOffscreenX();
+    else if (this.phase !== 'swordExit' && this.phase !== 'swordDash') this.clampPosition();
     this.applyTransform();
+    this.drawGrip();
     const bombHeight = Phaser.Math.Clamp(height * 0.075, 34, 60);
     this.bombs.forEach((bomb, index) => {
       bomb.setPosition(BOMB_SPOTS[index].x * width, BOMB_SPOTS[index].y * height);
@@ -193,6 +228,9 @@ export class HelicoprionBoss {
     if (this.active && helicoprionStatus(this.state) === 'dead') this.host.setHarvestButton(this.nearCorpse());
     if (!this.fighting || !this.container) return;
     this.flickerFuses();
+    this.skillArt?.clear();
+    this.updateWaves(dt);
+    if (!this.active) return;
     this.phaseTimer -= dt;
     switch (this.phase) {
       case 'idle':
@@ -216,6 +254,35 @@ export class HelicoprionBoss {
         this.dangerText?.setAlpha(0.65 + Math.sin(this.phaseTimer * 24) * 0.35);
         if (this.phaseTimer <= 0) this.swingJaw();
         break;
+      case 'waves':
+        this.updateWaveVolley();
+        break;
+      case 'devourWindup':
+        if (this.phaseTimer <= 0) this.beginDevourDash();
+        break;
+      case 'devourDash':
+      case 'swordDash':
+        this.updateSkillDash(dt, this.phase === 'swordDash' ? 'sword' : 'devour');
+        break;
+      case 'spinWindup':
+        if (this.phaseTimer <= 0) {
+          this.clearDanger();
+          this.spinHit = false;
+          this.setPhase('spinning', SPIN_SECONDS);
+        }
+        break;
+      case 'spinning':
+        this.updateSpin(dt);
+        break;
+      case 'swordExit':
+        this.updateSwordExit(dt);
+        break;
+      case 'swordWait':
+        if (this.phaseTimer <= 0) this.beginSwordDash();
+        break;
+      case 'grip':
+        this.updateGrip(dt);
+        break;
       case 'stunned':
         this.container.angle += Math.sin(this.phaseTimer * 30) * 0.6;
         if (this.phaseTimer <= 0) this.setPhase('recover', 0.6);
@@ -225,7 +292,7 @@ export class HelicoprionBoss {
 
   /** 총알·브레스 선분이 몸에 닿으면 피해를 주고 true를 돌려줍니다. */
   hitSegment(ax: number, ay: number, bx: number, by: number, extraRadius: number, damage: number): boolean {
-    if (!this.fighting || !this.container) return false;
+    if (!this.fighting || !this.container?.visible) return false;
     const hit = this.hitCircles().some(c => segmentPointDistance(c.x, c.y, ax, ay, bx, by) <= c.r + extraRadius);
     if (hit) this.damage(damage, false);
     return hit;
@@ -237,9 +304,11 @@ export class HelicoprionBoss {
     this.respawnText?.destroy();
     this.respawnText = undefined;
     if (!this.container) this.createBossSprite();
+    this.resetSkills();
+    this.pattern = 0;
     this.setPhase('idle', H.openingDelay);
     this.layout(this.scene.scale.width, this.scene.scale.height);
-    this.host.showNotice('🦈 헬리코프리온이 나타났다! 멀면 돌진, 가까우면 아래턱을 휘두릅니다.\n💣 B 폭탄 쪽으로 돌진을 유도하면 큰 피해를 줄 수 있어요!');
+    this.host.showNotice('🦈 헬리코프리온이 나타났다! 포식에 잡히면 발사 버튼을 연타하세요.\n💣 B 폭탄 쪽으로 돌진을 유도하면 큰 피해를 줄 수 있어요!');
   }
 
   private createBossSprite() {
@@ -297,7 +366,13 @@ export class HelicoprionBoss {
   }
 
   private startAttack() {
+    const pattern = PATTERNS[this.pattern];
+    this.pattern = (this.pattern + 1) % PATTERNS.length;
     const p = this.host.player();
+    if (pattern !== 'normal') {
+      this.startSpecial(pattern, p);
+      return;
+    }
     if (chooseAttack(this.distanceToPlayer()) === 'charge') {
       // 돌진 방향은 예고 순간의 주인공 위치로 고정하고, 벽에 닿을 때까지 직진합니다.
       const dx = p.x - this.x;
@@ -317,6 +392,253 @@ export class HelicoprionBoss {
       this.setPhase('jawWindup', H.jawWindup);
     }
     this.applyTransform();
+  }
+
+  private startSpecial(pattern: Exclude<typeof PATTERNS[number], 'normal'>, p: Point) {
+    if (pattern === 'sword') {
+      const { width } = this.scene.scale;
+      this.swordSide = p.x > width / 2 ? -1 : 1;
+      this.heading = this.swordSide === 1 ? 0 : Math.PI;
+      this.audio.playCharge();
+      this.host.showNotice('헬리코프리온이 화면 밖으로 사라졌어요!');
+      this.setPhase('swordExit', 0);
+      return;
+    }
+    this.heading = Math.atan2(p.y - this.y, p.x - this.x);
+    this.applyTransform();
+    if (pattern === 'waves') {
+      this.wavesFired = 0;
+      this.audio.playCharge();
+      this.setPhase('waves', 0.38);
+    } else if (pattern === 'devour') {
+      this.jawTarget = { ...p };
+      this.drawDangerCircle(p.x, p.y, 56, '⚠️ 포식!');
+      this.audio.playCharge();
+      this.setPhase('devourWindup', 0.64);
+    } else {
+      this.drawDangerCircle(this.x, this.y, this.displayWidth * 0.51, '⚠️ 스핀어택!');
+      this.audio.playCharge();
+      this.setPhase('spinWindup', 0.55);
+    }
+  }
+
+  private slashJaw() {
+    if (!this.jaw) return;
+    this.scene.tweens.killTweensOf(this.jaw);
+    this.jaw.setAngle(31);
+    this.scene.tweens.add({ targets: this.jaw, angle: -13, duration: 73, yoyo: true,
+      onComplete: () => this.jaw?.setAngle(0) });
+  }
+
+  private updateWaveVolley() {
+    while (this.phaseTimer <= 0 && this.wavesFired < 3) {
+      const p = this.host.player();
+      this.heading = clampTilt(Math.atan2(p.y - this.y, p.x - this.x), IDLE_TILT);
+      this.applyTransform();
+      const head = this.headPoint();
+      const angle = Math.atan2(p.y - head.y, p.x - head.x) + (this.wavesFired - 1) * 0.13;
+      this.waves.push({ ...head, angle, life: 1.8 });
+      this.slashJaw();
+      this.audio.playSaw();
+      this.wavesFired++;
+      this.phaseTimer += WAVE_INTERVAL;
+    }
+    if (this.wavesFired === 3) this.setPhase('recover', 0.82);
+  }
+
+  private updateWaves(dt: number) {
+    const p = this.host.player();
+    const { width, height } = this.scene.scale;
+    const g = this.skillArt;
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      const wave = this.waves[i];
+      const dx = Math.cos(wave.angle);
+      const dy = Math.sin(wave.angle);
+      const x = wave.x, y = wave.y;
+      const radius = 32;
+      wave.x += dx * 575 * dt;
+      wave.y += dy * 575 * dt;
+      wave.life -= dt;
+      const hit = segmentPointDistance(p.x, p.y, x, y, wave.x, wave.y) <= radius + 12;
+      if (hit || wave.life <= 0 || wave.x < -50 || wave.x > width + 50 || wave.y < -50 || wave.y > height + 50) this.waves.splice(i, 1);
+      if (hit) {
+        this.host.damagePlayer(H.attack, '헬리코프리온의 검기');
+        if (!this.active) return;
+        continue;
+      }
+      if (wave.life <= 0 || !g) continue;
+      g.lineStyle(6, 0x67e8f9, 0.86);
+      g.lineBetween(wave.x - dx * 13 - dy * radius, wave.y - dy * 13 + dx * radius, wave.x + dx * 12, wave.y + dy * 12);
+      g.lineBetween(wave.x + dx * 12, wave.y + dy * 12, wave.x - dx * 13 + dy * radius, wave.y - dy * 13 - dx * radius);
+    }
+  }
+
+  private beginDevourDash() {
+    const target = this.jawTarget;
+    this.jawTarget = undefined;
+    this.clearDanger();
+    if (!target) { this.setPhase('recover', 0.55); return; }
+    const angle = Math.atan2(target.y - this.y, target.x - this.x);
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    this.heading = angle;
+    this.skillDash = {
+      dx, dy,
+      remaining: Math.min(distanceToBounds(this.x, this.y, dx, dy, this.bounds()), Math.hypot(target.x - this.x, target.y - this.y) + 38),
+    };
+    this.setPhase('devourDash', 0);
+  }
+
+  private swordOffscreenX() {
+    const { width } = this.scene.scale;
+    return this.swordSide === 1 ? width + this.displayWidth * 0.65 : -this.displayWidth * 0.65;
+  }
+
+  private updateSwordExit(dt: number) {
+    const goal = this.swordOffscreenX();
+    this.x += Phaser.Math.Clamp(goal - this.x, -1060 * dt, 1060 * dt);
+    this.applyTransform();
+    if (Math.abs(goal - this.x) <= 0.1) {
+      this.container?.setVisible(false);
+      // Lock the lane while offscreen so an early vertical dodge is rewarded.
+      this.y = Phaser.Math.Clamp(this.host.player().y, 24, this.scene.scale.height - 20);
+      this.setPhase('swordWait', 0.48);
+    }
+  }
+
+  private beginSwordDash() {
+    const { width, height } = this.scene.scale;
+    this.x = this.swordOffscreenX();
+    this.y = Phaser.Math.Clamp(this.y, 24, height - 20);
+    const dx = -this.swordSide;
+    this.heading = dx > 0 ? 0 : Math.PI;
+    this.skillDash = { dx, dy: 0, remaining: width + this.displayWidth * 1.3 };
+    this.container?.setVisible(true);
+    this.applyTransform();
+    this.audio.playSaw();
+    this.setPhase('swordDash', 0);
+  }
+
+  private updateSkillDash(dt: number, kind: GripKind) {
+    const dash = this.skillDash;
+    if (!dash) { this.setPhase('recover', 1); return; }
+    const before = this.headPoint();
+    const step = Math.min(dash.remaining, (kind === 'sword' ? H.swordSpeed : 1000) * dt);
+    this.x += dash.dx * step;
+    this.y += dash.dy * step;
+    dash.remaining -= step;
+    this.applyTransform();
+    const head = this.headPoint();
+    if (kind === 'sword') this.skillArt?.lineStyle(13, 0xea7be9, 0.72).lineBetween(before.x, before.y, head.x, head.y);
+    const p = this.host.player();
+    if (segmentPointDistance(p.x, p.y, before.x, before.y, head.x, head.y) <= this.displayWidth * 0.08 + 16) {
+      const passed = Phaser.Math.Clamp((head.x - p.x) * dash.dx + (head.y - p.y) * dash.dy, 0, step);
+      this.x -= passed * dash.dx;
+      this.y -= passed * dash.dy;
+      this.skillDash = undefined;
+      this.clampPosition();
+      this.applyTransform();
+      this.beginGrip(kind);
+      return;
+    }
+    if (dash.remaining <= 0) {
+      this.skillDash = undefined;
+      this.clampPosition();
+      this.applyTransform();
+      this.setPhase('recover', kind === 'sword' ? 1.4 : 0.85);
+    }
+  }
+
+  private tailPoint() {
+    const reach = this.displayWidth * 0.465;
+    return { x: this.x - Math.cos(this.heading) * reach, y: this.y - Math.sin(this.heading) * reach };
+  }
+
+  private updateSpin(dt: number) {
+    const steps = Math.max(1, Math.ceil(dt / 0.025));
+    let before = this.tailPoint();
+    let after = before;
+    const p = this.host.player();
+    for (let i = 0; i < steps; i++) {
+      this.heading += Math.PI * 2 * dt / steps / SPIN_SECONDS;
+      after = this.tailPoint();
+      if (!this.spinHit && segmentPointDistance(p.x, p.y, before.x, before.y, after.x, after.y) <= this.displayWidth * 0.075 + 19) {
+        this.spinHit = true;
+        this.host.damagePlayer(36, '헬리코프리온의 스핀어택');
+        if (!this.active) return;
+        const away = Math.atan2(p.y - this.y, p.x - this.x);
+        this.host.knockPlayer(Math.cos(away) * 270, Math.sin(away) * 270);
+      }
+      before = after;
+    }
+    this.applyTransform();
+    const radius = this.displayWidth * 0.465;
+    this.skillArt?.lineStyle(5, 0xcffafe, 0.7).strokeCircle(this.x, this.y, radius).fillStyle(0xffffff, 0.7).fillCircle(after.x, after.y, 10);
+    if (this.phaseTimer <= 0) {
+      this.heading = clampTilt(this.heading, IDLE_TILT);
+      this.setPhase('recover', 1.1);
+      this.applyTransform();
+    }
+  }
+
+  private beginGrip(kind: GripKind) {
+    this.grip = newHelicoprionGrip(kind);
+    this.setPhase('grip', 0);
+    this.host.interruptInput();
+    this.host.damagePlayer(H.attack, kind === 'devour' ? '헬리코프리온의 포식' : '헬리코프리온의 소드 브레이크', true);
+    if (this.active) this.drawGrip();
+  }
+
+  private drawGrip() {
+    if (!this.grip || !this.gripText) { this.gripText?.setVisible(false); return; }
+    const { width, height } = this.scene.scale;
+    this.gripText.setPosition(width / 2, height * 0.72).setVisible(true).setText(this.grip.kind === 'devour'
+      ? `포식! 발사 버튼 / Space 연타  ${this.grip.presses}/${H.escapePresses}`
+      : `소드 브레이크 · 기절 ${Math.ceil(this.grip.remaining * 10) / 10}초`);
+  }
+
+  private updateGrip(dt: number) {
+    const grip = this.grip;
+    if (!grip) return;
+    const p = this.host.player();
+    const tick = tickHelicoprionGrip(grip, dt);
+    this.skillArt?.lineStyle(3, 0xf0abfc, 0.8).strokeCircle(p.x, p.y, grip.kind === 'sword' ? 38 : 29);
+    for (let i = 0; i < tick.cuts; i++) {
+      this.slashJaw();
+      this.audio.playSaw();
+      const kind = grip.kind === 'devour';
+      this.host.damagePlayer(kind ? H.devourTickDamage : H.swordTickDamage,
+        kind ? '헬리코프리온의 포식 연타' : '소드 브레이크 연속 베기', true);
+      if (!this.active) return;
+      this.skillArt?.lineStyle(5, 0xf9a8d4, 0.9).lineBetween(p.x - 28, p.y + 21, p.x + 27, p.y - 22);
+    }
+    if (tick.finalSlash) {
+      this.slashJaw();
+      this.audio.playSaw();
+      const stroke = this.scene.add.graphics().setDepth(12);
+      stroke.lineStyle(16, 0xffdaff, 0.95).lineBetween(p.x + 12, p.y - 92, p.x - 12, p.y + 88);
+      this.scene.tweens.add({ targets: stroke, alpha: 0, duration: 300, onComplete: () => stroke.destroy() });
+      this.host.damagePlayer(H.swordFinalDamage, '소드 브레이크 내려베기', true);
+      if (!this.active) return;
+      this.host.knockPlayer(0, 245);
+    }
+    if (tick.finished) this.releaseGrip();
+    else this.drawGrip();
+  }
+
+  private releaseGrip() {
+    this.grip = undefined;
+    this.drawGrip();
+    this.setPhase('recover', 1.12);
+  }
+
+  private resetSkills() {
+    this.waves = [];
+    this.skillDash = undefined;
+    this.grip = undefined;
+    this.gripText?.setVisible(false);
+    this.skillArt?.clear();
+    this.container?.setVisible(true);
   }
 
   private beginCharge() {
@@ -424,6 +746,7 @@ export class HelicoprionBoss {
     this.state.respawn = 0;
     this.state.harvests = 0;
     this.charge = this.jawTarget = undefined;
+    this.resetSkills();
     this.clearDanger();
     this.audio.setBossMusic(null);
     this.audio.playBossVictory();
@@ -576,7 +899,7 @@ export class HelicoprionBoss {
   private applyTransform() {
     if (!this.container) return;
     const scale = this.displayWidth / SOURCE_WIDTH;
-    const facingLeft = Math.cos(this.heading) < 0;
+    const facingLeft = this.phase !== 'spinning' && Math.cos(this.heading) < 0;
     this.container.setPosition(this.x, this.y);
     this.container.setScale(facingLeft ? -scale : scale, scale);
     this.container.setRotation(facingLeft ? this.heading - Math.PI : this.heading);
