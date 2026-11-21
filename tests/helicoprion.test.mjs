@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HELICOPRION, HELICOPRION_HARVEST_REWARDS, BOMB_SPOTS, chooseAttack, harvestHelicoprion, helicoprionStatus, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave, restoreHelicoprion, newHelicoprionGrip, pressHelicoprionEscape, tickHelicoprionGrip,
+  HELICOPRION, HELICOPRION_HARVEST_REWARDS, BOMB_SPOTS, chooseAttack, harvestHelicoprion, helicoprionStatus, distanceToBounds, bombHitDuringCharge, tickBombs, newHelicoprion, isHelicoprionSave, restoreHelicoprion, newHelicoprionGrip, pressHelicoprionEscape, tickHelicoprionGrip, HELICOPRION_PATTERNS, randomSwordAmbush, swordDashPath, segmentPointDistance,
 } from '../.test-build/Helicoprion.js';
 
 test('boss numbers follow the design', () => {
@@ -97,4 +97,33 @@ test('devour requires eight presses, while Sword Break stun ends in one finishin
   for (let i = 0; i < 12; i++) assert.equal(pressHelicoprionEscape(sword), false);
   assert.deepEqual(tickHelicoprionGrip(sword, 0.65), { cuts: 2, finished: false, finalSlash: false });
   assert.deepEqual(tickHelicoprionGrip(sword, 3), { cuts: 5, finished: true, finalSlash: true });
+});
+
+
+test('Sword Break chooses every entry direction and plans a straight path through the locked point', () => {
+  const target = { x: 730, y: 216 };
+  const starts = new Set();
+  for (let i = 0; i < 8; i++) {
+    const samples = [i / 8 + 0.01, i / 8];
+    const plan = randomSwordAmbush(() => samples.shift());
+    assert.equal(plan.angle, i * Math.PI / 4);
+    assert.ok(plan.delay >= 0.35 && plan.delay <= 2.15);
+    const { x, y, dx, dy, remaining } = swordDashPath(target, plan.angle, 1000, 640, 155);
+    const bx = x + dx * remaining, by = y + dy * remaining;
+    const offscreen = (x, y) => x < 0 || x > 1000 || y < 0 || y > 640;
+    assert.ok(offscreen(x, y) && offscreen(bx, by));
+    assert.ok(segmentPointDistance(target.x, target.y, x, y, bx, by) < 0.01);
+    assert.ok(segmentPointDistance(target.x - dy * 75, target.y + dx * 75, x, y, bx, by) > 70);
+    starts.add(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  assert.equal(starts.size, 8);
+  assert.ok(randomSwordAmbush(() => 0.98).delay - randomSwordAmbush(() => 0.02).delay > 1.5);
+});
+
+test('all three skill chains are in order and the spin is faster', () => {
+  assert.deepEqual(HELICOPRION_PATTERNS.filter(chain => chain.length > 1), [
+    ['charge', 'waves'], ['devour', 'spin'], ['sword', 'charge', 'waves', 'spin'],
+  ]);
+  assert.ok(HELICOPRION.spinWindup < 0.3);
+  assert.ok(HELICOPRION.spinSeconds <= 0.4);
 });

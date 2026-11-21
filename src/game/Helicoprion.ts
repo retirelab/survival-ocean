@@ -10,6 +10,11 @@ export const HELICOPRION = {
   swordTickDamage: 15,
   swordFinalDamage: 65,
   swordSpeed: 2600,
+  swordWaitMin: 0.35,
+  swordWaitMax: 2.15,
+  spinWindup: 0.22,
+  spinSeconds: 0.40,
+  comboRecovery: 0.16,
   attack: 30,
   bombDamage: 500,
   /** 이 거리(px)보다 멀면 돌진, 가까우면 아래턱 휘두르기 */
@@ -59,6 +64,30 @@ export const HELICOPRION_HARVEST_REWARDS = [
 ] as const;
 
 export type HelicoprionAttack = 'charge' | 'jaw';
+export const HELICOPRION_PATTERNS = [
+  ['charge', 'waves'],
+  ['normal'],
+  ['devour', 'spin'],
+  ['sword', 'charge', 'waves', 'spin'],
+] as const;
+export type HelicoprionMove = typeof HELICOPRION_PATTERNS[number][number];
+
+export function randomSwordAmbush(random = Math.random) {
+  return {
+    angle: Math.floor(random() * 8) * Math.PI / 4,
+    delay: HELICOPRION.swordWaitMin + random() * (HELICOPRION.swordWaitMax - HELICOPRION.swordWaitMin),
+  };
+}
+
+/** Plan a straight pass through the target, beginning and ending beyond the visible arena. */
+export function swordDashPath(target: { x: number; y: number }, angle: number, width: number, height: number, margin: number) {
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  const bounds = { left: -margin, top: -margin, right: width + margin, bottom: height + margin };
+  const approach = distanceToBounds(target.x, target.y, -dx, -dy, bounds);
+  const exit = distanceToBounds(target.x, target.y, dx, dy, bounds);
+  return { x: target.x - dx * approach, y: target.y - dy * approach, dx, dy, remaining: approach + exit };
+}
+
 export type HelicoprionStatus = 'alive' | 'dead' | 'respawning';
 
 export interface HelicoprionSave {
