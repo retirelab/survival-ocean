@@ -4,20 +4,29 @@ import { BOSS_TRACKS } from '../game/ZoneMusic';
 import { segmentHitsRect } from '../game/SubmarineCombat';
 import {
   ABYSS_DRAGON as A, attackFor, chooseAbyssAttack, curtainSafeY, harvestAbyssDragon, inCurtain, maxHpFor,
-  newAbyssDragon, tickAbyssRespawn, type AbyssAttack, type AbyssDragonSave,
+  newAbyssDragon, tickAbyssRespawn, abyssCurtainDirection, damageAbyssDragon, restoreAbyssDragon, tickAbyssHealing,
+  type AbyssAttack, type AbyssDragonSave, type CurtainDirection,
 } from '../game/AbyssDragon';
 
 export interface AbyssDragonHost {
   player(): { x: number; y: number };
   /** ignoreInvuln: 긴 브레스처럼 무적시간과 상관없이 연속으로 들어가는 피해 */
   damagePlayer(amount: number, attacker: string, ignoreInvuln?: boolean): void;
+  bitePlayer(amount: number): void;
+  pushPlayer(dx: number, dy: number): void;
   showNotice(message: string): void;
   setHarvestButton(visible: boolean): void;
   addLoot(item: string): void;
 }
 
 type Shape = Phaser.Geom.Circle | Phaser.Geom.Polygon | Phaser.Geom.Rectangle;
-interface Danger { type: AbyssAttack; shape: Shape; timer: number; targetX: number; targetY: number }
+interface Danger {
+  type: AbyssAttack; shape: Shape; timer: number; targetX: number; targetY: number;
+  direction?: CurtainDirection;
+  flow?: { x: number; y: number; dx: number; dy: number; length: number; width: number };
+}
+type Flow = NonNullable<Danger['flow']>;
+const HYPER = { retreat: 0.65, pulses: 6, interval: 0.43, visible: 0.27, retreatScale: 0.66 } as const;
 interface Spike { gfx: Phaser.GameObjects.Triangle; vx: number; vy: number }
 
 const LOOT_ICONS: Record<string, string> = {
@@ -37,8 +46,7 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
 
 /**
  * 열수분출공층 보스. 잠든 수룡(지하세계 수룡과 같은 능력)을 쓰러뜨리면 화면이 하얗게 번쩍이며
- * 진화한 수룡(체력 4000, 공격력 80)으로 변합니다. 진화 뒤에는 넓은 브레스, 사방으로 날아가는 꼬리가시,
- * 화면 맨 아래만 피할 수 있는 긴 브레스를 씁니다.
+ * 진화한 수룡으로 변하고, 진화한 뒤 체력이 절반이 되면 분노합니다.
  */
 export class AbyssDragonBoss {
   private state: AbyssDragonSave = newAbyssDragon();
@@ -48,7 +56,10 @@ export class AbyssDragonBoss {
   private lastAttack?: AbyssAttack;
   private sinceCurtain = 0;
   private danger?: Danger;
-  private curtain?: { remaining: number; tick: number };
+  private curtain?: { remaining: number; tick: number; direction: CurtainDirection };
+  private current?: { flow: Flow; remaining: number };
+  private hyper?: { elapsed: number; fired: number; direction: number; beam?: Phaser.Geom.Polygon };
+  private sinceHyper = 0;
   private spikes: Spike[] = [];
 
   private sprite?: Phaser.GameObjects.Image;
@@ -76,11 +87,11 @@ export class AbyssDragonBoss {
   ) {}
 
   load(save: AbyssDragonSave | undefined) {
-    this.state = save ? { ...save } : newAbyssDragon();
+    this.state = restoreAbyssDragon(save);
   }
 
   snapshot(): AbyssDragonSave {
-    return { ...this.state };
+    return this.evolving ? restoreAbyssDragon(this.state) : { ...this.state };
   }
 
   /** 총알·브레스가 닿을 수 있는 상태(잠듦 포함) */
@@ -106,6 +117,7 @@ export class AbyssDragonBoss {
     this.cooldown = A.openingDelay;
     this.lastAttack = undefined;
     this.sinceCurtain = 0;
+    this.sinceHyper = 0;
     this.refreshVisual();
     if (this.state.state === 'evolved') {
       this.audio.setBossMusic(BOSS_TRACKS.abyssDragon);
@@ -122,7 +134,7 @@ export class AbyssDragonBoss {
     this.audio.setBossMusic(null);
     this.host.setHarvestButton(false);
     this.clearDanger();
-    this.stopCurtain();
+    this.stopSpecialAttacks();
     for (const spike of this.spikes) spike.gfx.destroy();
     this.spikes = [];
     if (this.sprite) this.scene.tweens.killTweensOf(this.sprite);
@@ -138,7 +150,10 @@ export class AbyssDragonBoss {
     if (this.sprite) {
       const source = this.sprite.texture.getSourceImage() as HTMLImageElement;
       const scale = Math.min(Math.min(width * 0.64, 620) / source.width, Math.min(height * 0.58, 500) / source.height);
-      this.sprite.setScale(scale).setPosition(width * 0.64, height * 0.49);
+      const retreat = this.hyper ? Math.min(1, this.hyper.elapsed / HYPER.retreat) : 0;
+      const farX = this.hyper?.direction === 1 ? 0.18 : 0.82;
+      this.sprite.setScale(scale * (1 - retreat * (1 - HYPER.retreatScale)))
+        .setPosition(width * (0.64 + (farX - 0.64) * retreat), height * (0.49 - 0.22 * retreat));
       this.statusText?.setPosition(this.sprite.x, this.sprite.y - this.sprite.displayHeight * 0.48 - 18);
     }
     this.respawnText?.setPosition(width * 0.64, height * 0.49);
@@ -157,11 +172,16 @@ export class AbyssDragonBoss {
       const seconds = Math.ceil(this.state.respawn);
       this.respawnText?.setText(`🐉 수룡 부활까지\n${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
     }
+    if (this.fighting) tickAbyssHealing(this.state, dt);
     this.updateSpikes(dt);
     if (!this.active) return;
     if (this.curtain) {
       this.updateCurtain(dt);
       if (!this.active) return;
+    } else if (this.current) {
+      this.updateCurrent(dt);
+    } else if (this.hyper) {
+      this.updateHyper(dt);
     } else if (this.fighting) {
       if (this.danger) {
         this.danger.timer -= dt;
@@ -279,7 +299,8 @@ export class AbyssDragonBoss {
         this.statusText.setText('🐉 수룡');
         break;
       case 'evolved':
-        this.statusText.setText('🔥 진화한 수룡');
+        this.statusText.setText(this.state.enraged ? '🔥 분노한 수룡 · 2페이즈' : '🔥 진화한 수룡');
+        if (this.state.enraged) this.sprite.setTint(0xffa08a);
         break;
       case 'dead':
         this.sprite.setTintFill(0x7b8794).setAlpha(0.92);
@@ -300,9 +321,9 @@ export class AbyssDragonBoss {
     const max = maxHpFor(this.state.state);
     const evolved = this.state.state === 'evolved';
     this.bar.fillStyle(0x1f2937, 0.95).fillRoundedRect(x, 118, barWidth, 18, 7);
-    this.bar.fillStyle(evolved ? 0xf97316 : 0xdc2626, 1)
+    this.bar.fillStyle(evolved && !this.state.enraged ? 0xf97316 : 0xdc2626, 1)
       .fillRoundedRect(x + 3, 121, (barWidth - 6) * Phaser.Math.Clamp(this.state.hp / max, 0, 1), 12, 5);
-    this.barText.setText(`${evolved ? '진화한 수룡' : '수룡'}  ${Math.ceil(this.state.hp)}/${max}`);
+    this.barText.setText(`${this.state.enraged ? '분노한 수룡 · 2페이즈' : evolved ? '진화한 수룡' : '수룡'}  ${Math.ceil(this.state.hp)}/${max}`);
   }
 
   private hitboxes() {
@@ -340,10 +361,15 @@ export class AbyssDragonBoss {
       this.host.showNotice('깊은 잠에 든 수룡이 깨어났습니다! 붉은 위험 표시에서 벗어나세요!');
     }
     if (!this.fighting) return;
-    this.state.hp = Math.max(0, this.state.hp - amount);
+    const { damage, enteredRage } = damageAbyssDragon(this.state, amount);
+    if (enteredRage) {
+      this.refreshStatus();
+      this.audio.playCharge();
+      this.host.showNotice('🔥 2페이즈 · 수룡이 분노합니다! 공격력과 방어력이 올라갑니다.');
+    }
     this.audio.playHit();
     if (critX !== undefined && critY !== undefined) {
-      const text = this.scene.add.text(critX, critY - 10, `크리티컬!  -${Math.round(amount)}`, {
+      const text = this.scene.add.text(critX, critY - 10, `크리티컬!  -${Math.round(damage)}`, {
         fontSize: '12px', color: '#fde047', fontStyle: 'bold', stroke: '#7c2d12', strokeThickness: 3,
       }).setOrigin(0.5).setDepth(42);
       this.scene.tweens.add({ targets: text, y: critY - 42, alpha: 0, duration: 720, ease: 'Cubic.Out', onComplete: () => text.destroy() });
@@ -357,7 +383,7 @@ export class AbyssDragonBoss {
   private startEvolution() {
     this.evolving = true;
     this.clearDanger();
-    this.stopCurtain();
+    this.stopSpecialAttacks();
     if (this.sprite) { this.scene.tweens.killTweensOf(this.sprite); this.sprite.setAngle(0); }
     this.audio.playExplosion();
     this.host.showNotice('수룡의 몸에서 눈부신 빛이 터져 나옵니다…!');
@@ -383,29 +409,34 @@ export class AbyssDragonBoss {
     this.evolving = false;
     this.state.state = 'evolved';
     this.state.hp = A.evolvedHp;
+    this.state.enraged = false;
     this.cooldown = A.openingDelay + 1.4;
     this.lastAttack = undefined;
     this.sinceCurtain = 0;
+    this.sinceHyper = 0;
     if (!announce) return;
     this.refreshVisual();
     this.audio.setBossMusic(BOSS_TRACKS.abyssDragon);
     this.audio.playLevelUp();
     this.scene.cameras.main.shake(500, 0.01);
-    this.host.showNotice('🔥 수룡이 진화했다! 진화한 수룡 (체력 4000 · 공격력 80)\n긴 브레스는 화면 맨 아래로 피하세요!');
+    this.host.showNotice(`🔥 수룡이 진화했다! (체력 ${A.evolvedHp} · 공격력 ${A.evolvedAttack})\n긴 브레스는 초록색 안전지대로 피하세요!`);
   }
 
   private defeat() {
     this.state.state = 'dead';
+    delete this.state.enraged;
+    delete this.state.healElapsed;
     this.state.hp = 0;
     this.state.harvests = 0;
     this.clearDanger();
-    this.stopCurtain();
+    this.stopSpecialAttacks();
     for (const spike of this.spikes) spike.gfx.destroy();
     this.spikes = [];
     if (this.sprite) { this.scene.tweens.killTweensOf(this.sprite); this.sprite.setAngle(0); }
     this.audio.setBossMusic(null);
     this.audio.playBossVictory();
     this.refreshStatus();
+    this.layout(this.scene.scale.width, this.scene.scale.height);
     this.host.showNotice(`🔥 진화한 수룡 토벌 성공! 회색 사체 가까이에서 갈무리 버튼을 누르세요. (총 ${A.harvestCount}회)`);
   }
 
@@ -415,10 +446,22 @@ export class AbyssDragonBoss {
     if (!this.sprite) return;
     const { width, height } = this.scene.scale;
     const evolved = this.state.state === 'evolved';
-    const attack = chooseAbyssAttack(evolved, this.lastAttack, this.sinceCurtain);
+    const p = this.host.player();
+    const close = Math.hypot(p.x - this.sprite.x, p.y - this.sprite.y) < Math.max(105, this.sprite.displayWidth * 0.36);
+    let attack: AbyssAttack;
+    if (evolved && this.sinceHyper >= (this.state.enraged ? 6 : 8)) attack = 'hyper';
+    else if (evolved && close && this.lastAttack !== 'ambush' && this.sinceCurtain < A.curtainMaxGap) attack = 'ambush';
+    else attack = chooseAbyssAttack(evolved, this.lastAttack, this.sinceCurtain);
     this.lastAttack = attack;
     this.sinceCurtain = attack === 'curtain' ? 0 : this.sinceCurtain + 1;
-    const p = this.host.player();
+    this.sinceHyper = attack === 'hyper' ? 0 : this.sinceHyper + 1;
+    if (attack === 'hyper') {
+      this.scene.tweens.killTweensOf(this.sprite);
+      this.sprite.setAngle(0);
+      this.hyper = { elapsed: 0, fired: 0, direction: p.x > width / 2 ? 1 : -1 };
+      this.audio.playCharge();
+      return;
+    }
     const targetX = Phaser.Math.Clamp(p.x, 28, width - 28);
     const targetY = Phaser.Math.Clamp(p.y, 90, height - 35);
     const headDirection = targetX < this.sprite.x ? -1 : 1;
@@ -426,10 +469,27 @@ export class AbyssDragonBoss {
     let shape: Shape;
 
     if (attack === 'curtain') {
-      shape = new Phaser.Geom.Rectangle(0, 0, width, curtainSafeY(height));
-      this.dangerText?.setText('⚠️ 긴 브레스!\n⬇ 화면 맨 아래로 피하세요 ⬇').setPosition(width / 2, height * 0.42);
-      this.scene.tweens.add({ targets: this.sprite, y: this.sprite.y - 18, duration: 600, yoyo: true, ease: 'Sine.easeInOut' });
-      this.danger = { type: attack, shape, timer: A.curtainWindup, targetX, targetY };
+      const direction = abyssCurtainDirection(this.state.enraged ?? false);
+      const boundary = curtainSafeY(height, direction);
+      const up = direction === 'up';
+      shape = new Phaser.Geom.Rectangle(0, up ? boundary : 0, width, up ? height - boundary : boundary);
+      const hint = up ? '⬆ 화면 맨 위로 피하세요 ⬆' : '⬇ 화면 맨 아래로 피하세요 ⬇';
+      this.dangerText?.setText(`⚠️ 긴 연속 브레스!\n${hint}`).setPosition(width / 2, height * 0.42);
+      this.scene.tweens.add({ targets: this.sprite, y: this.sprite.y + (up ? 18 : -18), duration: 600, yoyo: true, ease: 'Sine.easeInOut' });
+      this.danger = { type: attack, shape, timer: A.curtainWindup, targetX, targetY, direction };
+    } else if (attack === 'current') {
+      const x = this.sprite.x + headDirection * this.sprite.displayWidth * 0.27;
+      const y = this.sprite.y - this.sprite.displayHeight * 0.12;
+      const angle = Math.hypot(p.x - x, p.y - y) > 1 ? Math.atan2(p.y - y, p.x - x) : (headDirection === 1 ? 0 : Math.PI);
+      const flow = { x, y, dx: Math.cos(angle), dy: Math.sin(angle), length: Math.hypot(width, height), width: Math.min(178, width * 0.43) };
+      shape = beam(flow.x, flow.y, flow.x + flow.dx, flow.y + flow.dy, flow.length, flow.width);
+      this.dangerText?.setText('⚠️ 급류!').setPosition((x + p.x) / 2, (y + p.y) / 2);
+      this.danger = { type: attack, shape, timer: 0.85, targetX, targetY, flow };
+    } else if (attack === 'ambush' || attack === 'bite') {
+      const quick = attack === 'ambush';
+      shape = new Phaser.Geom.Circle(p.x, p.y, Math.min(quick ? 70 : 96, width * (quick ? 0.21 : 0.26)));
+      this.dangerText?.setText(quick ? '⚠️ 급습!' : '⚠️ 깨물기!').setPosition(p.x, p.y);
+      this.danger = { type: attack, shape, timer: quick ? 0.24 : 0.78, targetX: p.x, targetY: p.y };
     } else if (attack === 'breath') {
       const mouthX = this.sprite.x + headDirection * this.sprite.displayWidth * 0.28;
       const mouthY = this.sprite.y - this.sprite.displayHeight * 0.12;
@@ -461,8 +521,9 @@ export class AbyssDragonBoss {
     else g.fillPoints(shape.points, true).strokePoints(shape.points, true);
     if (this.danger.type === 'curtain') {
       const { width, height } = this.scene.scale;
-      const safeY = curtainSafeY(height);
-      g.fillStyle(0x22c55e, 0.25).fillRect(0, safeY, width, height - safeY);
+      const up = this.danger.direction === 'up';
+      const safeY = curtainSafeY(height, this.danger.direction);
+      g.fillStyle(0x22c55e, 0.25).fillRect(0, up ? 0 : safeY, width, up ? safeY : height - safeY);
       g.lineStyle(3, 0x4ade80, 0.9).lineBetween(0, safeY, width, safeY);
     }
   }
@@ -478,7 +539,13 @@ export class AbyssDragonBoss {
     if (!danger) return;
     if (danger.type === 'curtain') {
       this.clearDanger();
-      this.curtain = { remaining: A.curtainDuration, tick: 0 };
+      this.curtain = { remaining: A.curtainDuration, tick: 0, direction: danger.direction ?? 'down' };
+      this.audio.playCharge();
+      return;
+    }
+    if (danger.flow) {
+      this.clearDanger();
+      this.current = { flow: danger.flow, remaining: A.currentSeconds };
       this.audio.playCharge();
       return;
     }
@@ -494,6 +561,15 @@ export class AbyssDragonBoss {
     this.scene.tweens.add({ targets: effect, alpha: 0, duration: 360, onComplete: () => effect.destroy() });
     if (type === 'arm') this.playArmSlam(targetX, targetY);
     else if (type === 'tail') this.playTailSwing(targetX, targetY);
+    else if ((type === 'ambush' || type === 'bite') && this.sprite) {
+      const sprite = this.sprite;
+      const dx = targetX - sprite.x;
+      const dy = targetY - sprite.y;
+      this.scene.tweens.add({
+        targets: sprite, x: sprite.x + dx * 0.16, y: sprite.y + dy * 0.16,
+        duration: 105, yoyo: true, ease: 'Quad.easeOut',
+      });
+    }
     else if (this.sprite) {
       const sprite = this.sprite;
       this.scene.tweens.add({ targets: sprite, x: sprite.x + (sprite.flipX ? 8 : -8), duration: 90, yoyo: true, onComplete: () => sprite.setAngle(0) });
@@ -501,9 +577,11 @@ export class AbyssDragonBoss {
     this.clearDanger();
     this.cooldown = 0;
     if (hit) {
+      if (type === 'bite') { this.host.bitePlayer(this.attackDamage); return; }
+      if (type === 'ambush') { this.host.damagePlayer(this.attackDamage, '수룡의 급습'); return; }
       const name = type === 'breath' ? (this.state.state === 'evolved' ? '넓은 푸른 빛의 브레스' : '푸른 빛의 브레스')
         : type === 'arm' ? '팔 휘두르기' : '꼬리 휘두르기';
-      this.host.damagePlayer(attackFor(this.state.state), `수룡의 ${name}`);
+      this.host.damagePlayer(this.attackDamage, `수룡의 ${name}`);
     }
   }
 
@@ -559,46 +637,128 @@ export class AbyssDragonBoss {
         this.spikes.splice(i, 1);
       }
       if (hit) {
-        this.host.damagePlayer(attackFor(this.state.state), '수룡의 꼬리가시');
+        this.host.damagePlayer(this.attackDamage, '수룡의 꼬리가시');
         if (!this.active) return;
       }
     }
   }
+
+  private get attackDamage() { return attackFor(this.state.state, this.state.enraged); }
 
   private updateCurtain(dt: number) {
     const curtain = this.curtain;
     if (!curtain) return;
+    curtain.tick -= Math.min(dt, curtain.remaining);
     curtain.remaining -= dt;
-    curtain.tick -= dt;
     const { width, height } = this.scene.scale;
-    const safeY = curtainSafeY(height);
+    const safeY = curtainSafeY(height, curtain.direction);
+    const up = curtain.direction === 'up';
+    const top = up ? safeY : 0;
+    const bottom = up ? height : safeY;
     const g = this.curtainGraphics;
     if (g) {
       const pulse = 0.5 + Math.sin(curtain.remaining * 30) * 0.12;
-      g.clear().fillStyle(0x0284c7, 0.45 + pulse * 0.2).fillRect(0, 0, width, safeY);
+      g.clear().fillStyle(0x0284c7, 0.45 + pulse * 0.2).fillRect(0, top, width, bottom - top);
       for (let i = 0; i < 9; i++) {
         const x = ((i + 0.5) / 9) * width + Math.sin(curtain.remaining * 9 + i) * 14;
-        g.fillStyle(0x7dd3fc, 0.55).fillRect(x - 10, 0, 20, safeY);
-        g.fillStyle(0xe0f2fe, 0.8).fillRect(x - 3, 0, 6, safeY);
+        g.fillStyle(0x7dd3fc, 0.55).fillRect(x - 10, top, 20, bottom - top);
+        g.fillStyle(0xe0f2fe, 0.8).fillRect(x - 3, top, 6, bottom - top);
       }
-      g.fillStyle(0xe0f2fe, 0.9).fillRect(0, safeY - 6, width, 6);
+      const span = bottom - top;
+      g.fillStyle(0xe0f2fe, 0.5);
+      for (let i = 0; i < 12; i++) {
+        const travel = ((A.curtainDuration - curtain.remaining) * 610 + i * span / 12) % span;
+        const y = up ? bottom - travel : top + travel;
+        g.fillRect(width * ((i * 37 % 100) / 100), y, 4, Math.min(28, bottom - y));
+      }
+      g.fillStyle(0x22c55e, 0.22).fillRect(0, up ? 0 : safeY, width, up ? safeY : height - safeY);
+      g.fillStyle(0xe0f2fe, 0.9).fillRect(0, up ? top : bottom - 6, width, 6);
     }
     const p = this.host.player();
     while (curtain.tick <= 0) {
       curtain.tick += A.curtainTick;
-      if (inCurtain(p.y, height)) {
-        this.host.damagePlayer(A.curtainDamage, '수룡의 긴 브레스', true);
+      if (inCurtain(p.y, height, curtain.direction)) {
+        this.host.damagePlayer(A.curtainDamage * (this.state.enraged ? A.rageAttack : 1), '수룡의 긴 연속 브레스', true);
         if (!this.active) return;
       }
     }
     if (curtain.remaining <= 0) {
-      this.stopCurtain();
+      this.curtain = undefined;
+      this.curtainGraphics?.clear();
       this.cooldown = 0.6;
     }
   }
 
-  private stopCurtain() {
+  private updateCurrent(dt: number) {
+    const current = this.current;
+    if (!current) return;
+    const { x, y, dx, dy, length, width } = current.flow;
+    const lane = beam(x, y, x + dx, y + dy, length, width);
+    const g = this.curtainGraphics;
+    if (g) {
+      g.clear().fillStyle(0x0ea5e9, 0.25).fillPoints(lane.points, true);
+      g.lineStyle(3, 0xa5f3fc, 0.7);
+      for (let i = 0; i < 12; i++) {
+        const along = (i * length / 12 + (A.currentSeconds - current.remaining) * 420) % length;
+        const offset = ((i % 5) - 2) * width * 0.17;
+        const px = x + along * dx - offset * dy;
+        const py = y + along * dy + offset * dx;
+        g.lineBetween(px, py, px + dx * 26, py + dy * 26);
+      }
+    }
+    const p = this.host.player();
+    const activeTime = Math.min(dt, current.remaining);
+    if (Phaser.Geom.Polygon.Contains(lane, p.x, p.y)) this.host.pushPlayer(dx * A.currentSpeed * activeTime, dy * A.currentSpeed * activeTime);
+    current.remaining -= dt;
+    if (current.remaining <= 0) {
+      this.current = undefined;
+      this.curtainGraphics?.clear();
+      this.cooldown = 0.5;
+    }
+  }
+
+  private updateHyper(dt: number) {
+    const hyper = this.hyper;
+    if (!hyper || !this.sprite) return;
+    hyper.elapsed += dt;
+    const { width, height } = this.scene.scale;
+    if (hyper.elapsed >= HYPER.retreat + HYPER.interval * HYPER.pulses) {
+      this.stopSpecialAttacks();
+      this.layout(width, height);
+      this.cooldown = 0.9;
+      return;
+    }
+    this.layout(width, height);
+    const g = this.curtainGraphics;
+    g?.clear();
+    const phase = hyper.elapsed - HYPER.retreat;
+    if (phase < 0) {
+      g?.lineStyle(4, 0x67e8f9, 0.72).strokeCircle(this.sprite.x, this.sprite.y, 22 + hyper.elapsed * 22);
+      return;
+    }
+    const pulse = Math.floor(phase / HYPER.interval);
+    const p = this.host.player();
+    if (pulse >= hyper.fired) {
+      hyper.fired = pulse + 1;
+      const facing = p.x >= this.sprite.x ? 1 : -1;
+      this.sprite.setFlipX(facing < 0);
+      const mouthX = this.sprite.x + facing * this.sprite.displayWidth * 0.28;
+      const mouthY = this.sprite.y - this.sprite.displayHeight * 0.12;
+      const angle = Math.atan2(p.y - mouthY, p.x - mouthX) + (pulse % 2 === 0 ? -0.12 : 0.12);
+      hyper.beam = beam(mouthX, mouthY, mouthX + Math.cos(angle), mouthY + Math.sin(angle),
+        Math.hypot(width, height) * 1.25, Math.min(255, height * 0.39, width * 0.55));
+      this.audio.playShoot();
+    }
+    if (phase % HYPER.interval > HYPER.visible || !hyper.beam) return;
+    g?.fillStyle(0x38bdf8, 0.60).fillPoints(hyper.beam.points, true)
+      .lineStyle(4, 0xcffafe, 0.88).strokePoints(hyper.beam.points, true);
+    if (Phaser.Geom.Polygon.Contains(hyper.beam, p.x, p.y)) this.host.damagePlayer(this.attackDamage, '수룡의 하이퍼 브레스');
+  }
+
+  private stopSpecialAttacks() {
     this.curtain = undefined;
+    this.current = undefined;
+    this.hyper = undefined;
     this.curtainGraphics?.clear();
   }
 }

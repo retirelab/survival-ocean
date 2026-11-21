@@ -8,6 +8,7 @@ import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
 import { PauseControls } from '../game/PauseControls';
 import { HelicoprionBoss } from './HelicoprionBoss';
+import { ABYSS_DRAGON, abyssBiteParalyzes } from '../game/AbyssDragon';
 import { AbyssDragonBoss } from './AbyssDragonBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
 import { GLACIAL_ZONE_INDEX, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE, GLACIAL_PASSAGE_WALLS, hitsGlacialWall, glacialPassageExit } from '../game/GlacialPassages';
@@ -357,6 +358,7 @@ export class OceanScene extends Phaser.Scene {
   private spawnTimer = 0;
   private shootCooldown = 0;
   private armorRemaining = 0;
+  private playerParalysis = 0;
   private shockCooldown = 0;
   private shockBtnBg!: Phaser.GameObjects.Arc;
   private shockBtnText!: Phaser.GameObjects.Text;
@@ -549,6 +551,20 @@ export class OceanScene extends Phaser.Scene {
     this.abyssDragon = new AbyssDragonBoss(this, this.audio, {
       player: () => ({ x: this.player.x, y: this.player.y }),
       damagePlayer: (amount, attacker, ignoreInvuln) => this.damagePlayer(amount, attacker, false, ignoreInvuln),
+      bitePlayer: amount => {
+        if (this.playerInvuln > 0 || this.damagePlayer(amount, '수룡의 깨물기')) return;
+        if (abyssBiteParalyzes()) {
+          this.playerParalysis = ABYSS_DRAGON.biteParalysisSeconds;
+          this.showNotice('⚡ 수룡의 깨물기! 4초간 마비되어 움직일 수 없어요.');
+        }
+      },
+      pushPlayer: (dx, dy) => {
+        const { width, height } = this.scale;
+        const x = Phaser.Math.Clamp(this.player.x + dx, 24, width - 24);
+        const y = Phaser.Math.Clamp(this.player.y + dy, 28, height - 20);
+        if (!this.abyssDragon.blocksPlayer(x, this.player.y)) this.player.x = x;
+        if (!this.abyssDragon.blocksPlayer(this.player.x, y)) this.player.y = y;
+      },
       showNotice: message => this.showNotice(message),
       setHarvestButton: visible => {
         this.harvestBtnBg.setVisible(visible);
@@ -803,7 +819,7 @@ export class OceanScene extends Phaser.Scene {
   private captureSave(): SaveGame {
     const { width, height } = this.scale;
     return {
-      combat: { armorRemaining: this.armorRemaining, shockCooldown: this.shockCooldown },
+      combat: { armorRemaining: this.armorRemaining, shockCooldown: this.shockCooldown, paralysisRemaining: this.playerParalysis },
       progress: { maxLevelExpanded: this.maxLevelExpanded, dragonPassUnlocked: this.dragonPassUnlocked },
       submarines: { ...this.fleet, owned: [...this.fleet.owned] },
       version: 1, savedAt: Date.now(), zoneIndex: this.zoneIndex, level: this.level,
@@ -834,6 +850,7 @@ export class OceanScene extends Phaser.Scene {
     this.fleet = save.submarines ? { ...save.submarines, owned: [...save.submarines.owned] } : newFleet();
     this.applySubmarine();
     this.armorRemaining = save.combat?.armorRemaining ?? 0;
+    this.playerParalysis = save.combat?.paralysisRemaining ?? 0;
     this.shockCooldown = save.combat?.shockCooldown ?? 0;
     // 진행 플래그는 changeZone보다 먼저 복원해야 레벨 확장 알림이 다시 뜨지 않습니다.
     const progress = resolveProgress(save);
@@ -2757,7 +2774,7 @@ export class OceanScene extends Phaser.Scene {
 
   /** 소드 크러셔 대시: 순간이동처럼 빠르게 앞으로 돌진하며 경로의 물고기·보스를 전기톱으로 벱니다. */
   private trySawDash() {
-    if (this.dashCooldown > 0) return;
+    if (this.dashCooldown > 0 || this.playerParalysis > 0) return;
     this.dashCooldown = COMBAT.dashCooldown;
     this.releaseAimAfterShot();
     const { width, height } = this.scale;
@@ -2917,6 +2934,7 @@ export class OceanScene extends Phaser.Scene {
     for (const name of ALL_MINERALS) this.mineralInventory[name] = 0;
     this.fleet = damageEquippedSubmarine(this.fleet);
     this.armorRemaining = 0;
+    this.playerParalysis = 0;
     this.armorGraphics.clear();
     this.resetHeldInput();
     for (const bullet of this.bullets) bullet.gfx.destroy();
@@ -3002,10 +3020,11 @@ export class OceanScene extends Phaser.Scene {
     const defense = effectiveDefense(this.fleet.equipped, this.defenseMultiplier, this.armorRemaining);
     const armorText = this.fleet.equipped === 'sturdy' && this.armorRemaining > 0 ? ` · 🛡️ ${Math.ceil(this.armorRemaining)}초` : '';
     const rapidText = this.fleet.equipped === 'baby_dragon' ? '브레스 연속 발사' : this.autoFireEnabled ? `난사×${this.rapidFireMultiplier}` : '난사 불가';
+    const paralysisText = this.playerParalysis > 0 ? ` · ⚡ 마비 ${Math.ceil(this.playerParalysis)}초` : '';
     const speedText = this.bulletSpeedMultiplier < 1 ? ' · 총알 느림' : '';
     const regenText = this.regenAmount > 0 ? ` · 회복+${this.regenAmount}/${this.regenInterval}초` : '';
     this.statsText.setText(
-      `⚔️ 공격×${+(this.attackMultiplier * shipAttack(this.fleet.equipped)).toFixed(2)}  🛡️ 방어×${+defense.toFixed(2)}${armorText}  ⚡ ${rapidText}${speedText}${regenText}  🎯 조준 버튼 / Z`
+      `⚔️ 공격×${+(this.attackMultiplier * shipAttack(this.fleet.equipped)).toFixed(2)}  🛡️ 방어×${+defense.toFixed(2)}${armorText}  ⚡ ${rapidText}${speedText}${regenText}${paralysisText}  🎯 조준 버튼 / Z`
     );
     const mineralTotal = Object.values(this.mineralInventory).reduce((sum, count) => sum + count, 0);
     const mineralSummary = (Object.entries(this.mineralInventory) as Array<[MineralType, number]>)
@@ -3040,6 +3059,8 @@ export class OceanScene extends Phaser.Scene {
     this.updateAimingInput();
     const dt = rawDt * (this.aiming ? 0.25 : 1);
     this.armorRemaining = Math.max(0, this.armorRemaining - rawDt);
+    const moveDt = Math.max(0, rawDt - this.playerParalysis) * (this.aiming ? 0.25 : 1);
+    this.playerParalysis = Math.max(0, this.playerParalysis - rawDt);
     this.shockCooldown = Math.max(0, this.shockCooldown - rawDt);
     this.armorGraphics.clear();
     if (this.fleet.equipped === 'sturdy' && this.armorRemaining > 0)
@@ -3112,8 +3133,8 @@ export class OceanScene extends Phaser.Scene {
     const previousPlayerX = this.player.x;
     const previousPlayerY = this.player.y;
     if (!this.aiming) {
-      const dx = vx * this.speed * dt;
-      const dy = vy * this.speed * dt;
+      const dx = vx * this.speed * moveDt;
+      const dy = vy * this.speed * moveDt;
       const passage = !!GLACIAL_PASSAGE_WALLS[this.zoneIndex];
       const steps = passage ? Math.max(1, Math.ceil(Math.hypot(dx, dy) / 6)) : 1;
       for (let i = 0; i < steps; i++) {

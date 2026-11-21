@@ -5,7 +5,16 @@ export const ABYSS_DRAGON = {
   baseHp: 1250,
   baseAttack: 50,
   /** 2단계: 진화한 수룡 */
-  evolvedHp: 4000,
+  evolvedHp: 8880,
+  rageThreshold: 4440,
+  rageDefense: 1.5,
+  rageAttack: 1.25,
+  healInterval: 5,
+  healAmount: 3,
+  currentSeconds: 2.4,
+  currentSpeed: 88,
+  biteParalysisChance: 0.03,
+  biteParalysisSeconds: 4,
   evolvedAttack: 80,
   telegraph: 1.15,
   baseBreathWidth: 105,
@@ -37,13 +46,15 @@ export const ABYSS_HARVEST_REWARDS = [
 ] as const;
 
 export type AbyssDragonState = 'sleeping' | 'awake' | 'evolved' | 'dead' | 'respawning';
-export type AbyssAttack = 'breath' | 'arm' | 'tail' | 'curtain';
+export type AbyssAttack = 'breath' | 'arm' | 'tail' | 'curtain' | 'current' | 'ambush' | 'bite' | 'hyper';
 
 export interface AbyssDragonSave {
   state: AbyssDragonState;
   hp: number;
   harvests: number;
   respawn: number;
+  enraged?: boolean;
+  healElapsed?: number;
 }
 
 export function newAbyssDragon(): AbyssDragonSave {
@@ -54,9 +65,43 @@ export function maxHpFor(state: AbyssDragonState): number {
   return state === 'evolved' || state === 'dead' ? ABYSS_DRAGON.evolvedHp : ABYSS_DRAGON.baseHp;
 }
 
-export function attackFor(state: AbyssDragonState): number {
-  return state === 'evolved' ? ABYSS_DRAGON.evolvedAttack : ABYSS_DRAGON.baseAttack;
+export function attackFor(state: AbyssDragonState, enraged = false): number {
+  if (state !== 'evolved') return ABYSS_DRAGON.baseAttack;
+  return ABYSS_DRAGON.evolvedAttack * (enraged ? ABYSS_DRAGON.rageAttack : 1);
 }
+
+export function restoreAbyssDragon(save?: AbyssDragonSave): AbyssDragonSave {
+  if (!save) return newAbyssDragon();
+  if (save.state === 'awake' && save.hp === 0) return { ...save, state: 'evolved', hp: ABYSS_DRAGON.evolvedHp, enraged: false };
+  // Keep the same percentage of HP for fights saved before the maximum increased.
+  if (save.state === 'evolved' && save.enraged === undefined) {
+    const hp = Math.round(save.hp / 4000 * ABYSS_DRAGON.evolvedHp);
+    return { ...save, hp, enraged: hp <= ABYSS_DRAGON.rageThreshold };
+  }
+  return { ...save };
+}
+
+export function damageAbyssDragon(save: AbyssDragonSave, amount: number) {
+  const damage = save.enraged ? amount / ABYSS_DRAGON.rageDefense : amount;
+  save.hp = Math.max(0, save.hp - damage);
+  const enteredRage = save.state === 'evolved' && !save.enraged && save.hp > 0 && save.hp <= ABYSS_DRAGON.rageThreshold;
+  if (enteredRage) {
+    save.enraged = true;
+    save.healElapsed = 0;
+  }
+  return { damage, enteredRage };
+}
+
+export function tickAbyssHealing(save: AbyssDragonSave, dt: number): void {
+  if (save.state !== 'evolved' || !save.enraged || save.hp <= 0) return;
+  const elapsed = (save.healElapsed ?? 0) + dt;
+  const ticks = Math.floor(elapsed / ABYSS_DRAGON.healInterval);
+  save.healElapsed = elapsed % ABYSS_DRAGON.healInterval;
+  save.hp = Math.min(ABYSS_DRAGON.evolvedHp, save.hp + ticks * ABYSS_DRAGON.healAmount);
+}
+
+export const abyssBiteParalyzes = (random = Math.random) => random() < ABYSS_DRAGON.biteParalysisChance;
+
 
 const STATES: readonly AbyssDragonState[] = ['sleeping', 'awake', 'evolved', 'dead', 'respawning'];
 
@@ -66,7 +111,10 @@ export function isAbyssDragonSave(value: unknown): value is AbyssDragonSave {
   const finite = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
   if (typeof v.state !== 'string' || !STATES.includes(v.state as AbyssDragonState)) return false;
   const state = v.state as AbyssDragonState;
-  return finite(v.hp, 0, maxHpFor(state)) && Number.isInteger(v.harvests) && finite(v.harvests, 0, ABYSS_DRAGON.harvestCount - 1) &&
+  if (v.enraged !== undefined && (state !== 'evolved' || typeof v.enraged !== 'boolean')) return false;
+  if (v.healElapsed !== undefined && (v.enraged !== true || !finite(v.healElapsed, 0, ABYSS_DRAGON.healInterval))) return false;
+  const maxHp = state === 'evolved' && v.enraged === undefined ? 4000 : maxHpFor(state);
+  return finite(v.hp, 0, maxHp) && Number.isInteger(v.harvests) && finite(v.harvests, 0, ABYSS_DRAGON.harvestCount - 1) &&
     finite(v.respawn, 0, ABYSS_DRAGON.respawnSeconds) && (state === 'respawning') === ((v.respawn as number) > 0);
 }
 
@@ -78,17 +126,26 @@ export function chooseAbyssAttack(
   evolved: boolean, last: AbyssAttack | undefined, sinceCurtain: number, random: () => number = Math.random,
 ): AbyssAttack {
   if (evolved && last !== 'curtain' && (sinceCurtain >= ABYSS_DRAGON.curtainMaxGap || random() < ABYSS_DRAGON.curtainChance)) return 'curtain';
-  const pool = (['breath', 'arm', 'tail'] as const).filter(attack => attack !== last);
+  const attacks: AbyssAttack[] = evolved ? ['breath', 'arm', 'tail', 'current', 'bite'] : ['breath', 'arm', 'tail'];
+  const pool = attacks.filter(attack => attack !== last);
   return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
 }
 
-/** 긴 브레스가 닿지 않는 화면 맨 아래 띠의 시작 높이 */
-export function curtainSafeY(height: number): number {
-  return height * (1 - ABYSS_DRAGON.curtainSafeBand);
+export type CurtainDirection = 'down' | 'up';
+
+/** Boundary between the dangerous area and the safe strip. */
+export function curtainSafeY(height: number, direction: CurtainDirection = 'down'): number {
+  const band = Math.min(height * 0.35, Math.max(55, height * ABYSS_DRAGON.curtainSafeBand));
+  return direction === 'up' ? band : height - band;
 }
 
-export function inCurtain(y: number, height: number): boolean {
-  return y < curtainSafeY(height);
+export function inCurtain(y: number, height: number, direction: CurtainDirection = 'down'): boolean {
+  const boundary = curtainSafeY(height, direction);
+  return direction === 'up' ? y > boundary : y < boundary;
+}
+
+export function abyssCurtainDirection(enraged: boolean, random = Math.random): CurtainDirection {
+  return enraged && random() < 0.5 ? 'up' : 'down';
 }
 
 /**

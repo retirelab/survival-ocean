@@ -1,7 +1,7 @@
 import { normalizeFleet, BASE_MINERALS, RARE_MINERALS, type FleetState } from './Submarines.js';
 import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
 import { MX3_ZONE_INDEX, isMX3Save, type MX3Save } from './MX3.js';
-import { isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
+import { ABYSS_DRAGON, isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
 /** 저장할 수 있는 가장 큰 구역 번호. */
@@ -23,7 +23,7 @@ export interface SaveProgress {
 export interface SaveGame {
   version: 1;
   submarines?: FleetState;
-  combat?: { armorRemaining: number; shockCooldown: number };
+  combat?: { armorRemaining: number; shockCooldown: number; paralysisRemaining?: number };
   progress?: SaveProgress;
   helicoprion?: HelicoprionSave;
   abyssDragon?: AbyssDragonSave;
@@ -66,7 +66,8 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (value.abyssDragon !== undefined && !isAbyssDragonSave(value.abyssDragon)) return false;
   const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
   if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;
-  if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30))) return false;
+  if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30) ||
+      (value.combat.paralysisRemaining !== undefined && !number(value.combat.paralysisRemaining, 0, ABYSS_DRAGON.biteParalysisSeconds)))) return false;
   const { player: p, stats: s, dragon: d, menu: m, upgrades: u, minerals: minerals } = value;
   if (!object(p) || !object(s) || !object(d) || !object(m) || !object(u) || !object(minerals)) return false;
   return number(p.x, 0, 1) && number(p.y, 0, 1) && (p.facing === 1 || p.facing === -1) && number(p.hp, 1, 250) &&
