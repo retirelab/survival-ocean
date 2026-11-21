@@ -1,3 +1,5 @@
+import { controlGamepadDialog, type GamepadControls } from './GamepadControls.js';
+
 /** DOM controls stay interactive while Phaser's entire scene is paused. */
 export class PauseControls {
   private root = document.createElement('div');
@@ -73,6 +75,12 @@ export class PauseControls {
     this.overlayOpen = false;
     this.pauseButton.hidden = !this.active;
     this.resume();
+  }
+
+  handleGamepad(pad: GamepadControls) {
+    if (!this.paused || this.overlayOpen) return false;
+    controlGamepadDialog(pad, this.panel, () => this.resume());
+    return true;
   }
 
   pause() {

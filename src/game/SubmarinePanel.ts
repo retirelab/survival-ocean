@@ -1,4 +1,5 @@
 import { getSubmarine, submarineImage, missingMaterials, repairSeconds, MATERIALS, BASE_MINERALS, gradeLabel, shopSubmarines, type Resources, type FleetState } from './Submarines.js';
+import { controlGamepadDialog, type GamepadControls } from './GamepadControls.js';
 
 export class SubmarinePanel {
   private root = document.createElement('div');
@@ -95,13 +96,19 @@ export class SubmarinePanel {
     this.balance.textContent = '보유 재료\n' + shown.map(name => `${name} ${resources[name]}개`).join(' · ');
     if (this.open) this.renderItems();
   }
-  private show() {
-    if (this.open || !this.handlers.open()) return;
+  show() {
+    if (this.open || !this.handlers.open()) return false;
     this.oldTouchAction = { body: document.body.style.touchAction, html: document.documentElement.style.touchAction };
     document.body.style.touchAction = 'pan-y'; document.documentElement.style.touchAction = 'pan-y';
     this.open = true; this.modal.style.display = 'flex'; this.message.textContent = '';
     this.renderItems(); this.closeButton.focus({ preventScroll: true });
     this.repairTimer = window.setInterval(() => this.updateRepairButtons(), 250);
+    return true;
+  }
+  handleGamepad(pad: GamepadControls) {
+    if (!this.open) return false;
+    controlGamepadDialog(pad, this.modal, () => this.close());
+    return true;
   }
   private renderItems() {
     this.list.replaceChildren();

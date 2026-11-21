@@ -138,7 +138,7 @@ export class MX3Boss {
       this.prompt.setVisible(true).setText(`M-X 3  ·  ${Math.ceil(this.state.hp)} / ${MX3.hp}`).setPosition(width / 2, Math.min(145, height * .24));
     } else if (this.state.phase === 'idle' && this.nearSubmarine()) {
       const { y, ry } = this.hull();
-      this.prompt.setVisible(true).setText('F / 수집 · 엿듣기').setPosition(width / 2, y - ry - 35);
+      this.prompt.setVisible(true).setText('F / 수집 / Xbox B · 엿듣기').setPosition(width / 2, y - ry - 35);
     } else {
       this.prompt.setVisible(false);
     }
@@ -158,7 +158,7 @@ export class MX3Boss {
     const speaker = (intro && this.state.line === MX3_INTRO.length - 1) || chosen !== undefined ? '주인공' : '???';
     const line = chosen !== undefined ? `${MX3_CHOICES[chosen]}${chosen === 1 ? ' (놀리듯)' : ''}`
       : intro ? MX3_INTRO[this.state.line] : MX3_OUTRO[this.state.line];
-    this.subtitle.setWordWrapWidth(w - 32).setText(this.choosing ? '주인공 · 대사 선택 (1 / 2 또는 터치)' : `${speaker}  ${line}\n\nF 또는 자막 터치 · 다음`);
+    this.subtitle.setWordWrapWidth(w - 32).setText(this.choosing ? '주인공 · 대사 선택 (1·2 / 터치 / Xbox A·B)' : `${speaker}  ${line}\n\nF / 자막 터치 / Xbox A · 다음`);
     let panelHeight = this.subtitle.height + 30;
     if (this.choosing) {
       this.options.forEach((option, i) => {

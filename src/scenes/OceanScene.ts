@@ -3,6 +3,7 @@ import { MX3, MX3_ZONE_INDEX } from '../game/MX3';
 import Phaser from 'phaser';
 import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
+import { GamepadControls, PAD } from '../game/GamepadControls';
 import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, holdWeapon, shipAttack, voltChargeLevel, sawBoost, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
@@ -344,6 +345,9 @@ export class OceanScene extends Phaser.Scene {
   private menuInputLockedUntil = 0;
   private menuObjects: Phaser.GameObjects.GameObject[] = [];
   private menuTargets: Array<{ bounds: Phaser.Geom.Rectangle; action: () => void }> = [];
+  private menuSelection = 0;
+  private menuSelectionOutline?: Phaser.GameObjects.Rectangle;
+  private gamepad = new GamepadControls();
   private pendingZoneTransition?: { zoneIndex: number; spawnY: number };
   private completedUpgradeStages = new Set<number>();
   private upgradeRanks: Record<'rapid' | 'defense' | 'attack', number> = {
@@ -629,8 +633,11 @@ export class OceanScene extends Phaser.Scene {
 
     const unlockAudio = () => this.audio.unlock();
     this.input.keyboard?.on('keydown', unlockAudio);
+    // PRE_STEP still runs when the scene is paused by a menu.
+    this.game.events.on(Phaser.Core.Events.PRE_STEP, this.pollGamepad, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.keyboard?.off('keydown', unlockAudio);
+      this.game.events.off(Phaser.Core.Events.PRE_STEP, this.pollGamepad, this);
       this.mx3Boss.leave();
       this.submarinePanel?.destroy();
       this.pauseControls?.destroy();
@@ -803,6 +810,7 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private resetHeldInput() {
+    this.gamepad.blockFire();
     this.joyPointerId = null;
     this.joyVec = { x: 0, y: 0 };
     this.shootPointerId = null;
@@ -1163,23 +1171,13 @@ export class OceanScene extends Phaser.Scene {
       this.shootHolding = false;
       this.shootBtnBg.setScale(1);
     }
-    if (this.mx3Boss.talking) {
-      if (this.mx3Boss.choosing) {
-        if (this.keyNumbers[0] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[0])) this.mx3Boss.advance(0);
-        else if (this.keyNumbers[1] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[1])) this.mx3Boss.advance(1);
-      } else if (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF)) {
-        this.mx3Boss.advance();
-      }
-      return;
-    }
-
     this.updateAimingInput();
   }
 
   private updateAimingInput() {
-    const zDown = Boolean(this.keyZ?.isDown);
-    if (!zDown) this.aimLockedUntilRelease = false;
-    this.setAiming(this.touchAimEnabled || (zDown && !this.aimLockedUntilRelease));
+    const aimDown = Boolean(this.keyZ?.isDown) || this.gamepad.down(PAD.lb);
+    if (!aimDown) this.aimLockedUntilRelease = false;
+    this.setAiming(this.touchAimEnabled || (aimDown && !this.aimLockedUntilRelease));
   }
 
   private setAiming(active: boolean) {
@@ -1221,6 +1219,7 @@ export class OceanScene extends Phaser.Scene {
     for (const object of this.menuObjects) object.destroy();
     this.menuObjects = [];
     this.menuTargets = [];
+    this.menuSelectionOutline = undefined;
   }
 
   private addMenuObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
@@ -1230,6 +1229,7 @@ export class OceanScene extends Phaser.Scene {
 
   private showStartMenu() {
     this.menuMode = 'start';
+    this.menuSelection = 0;
     this.menuInputLockedUntil = this.time.now + 250;
     this.pendingZoneTransition = undefined;
     this.rebuildMenu();
@@ -1240,6 +1240,7 @@ export class OceanScene extends Phaser.Scene {
     this.submarinePanel?.setActive(true);
     this.resetHeldInput();
     this.menuMode = 'upgrade';
+    this.menuSelection = 0;
     this.menuInputLockedUntil = this.time.now + 250;
     this.menuStage = Phaser.Math.Clamp(stage, 0, 3);
     this.pendingZoneTransition = pendingZone;
@@ -1292,7 +1293,7 @@ export class OceanScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(102);
       const hint = this.add
-        .text(width / 2, buttonY + (compact ? 45 : 62), saved ? '새 게임은 다음 저장 시 기존 저장을 덮어씁니다' : '버튼 터치 또는 Enter', { fontSize: '12px', color: '#94a3b8', wordWrap: { width: buttonWidth }, align: 'center' })
+        .text(width / 2, buttonY + (compact ? 45 : 62), saved ? '새 게임은 다음 저장 시 기존 저장을 덮어씁니다\nXbox: 방향키로 이동 · A 선택' : '터치 / Enter / Xbox A로 시작', { fontSize: '12px', color: '#94a3b8', wordWrap: { width: buttonWidth }, align: 'center' })
         .setOrigin(0.5)
         .setDepth(101);
       this.menuObjects.push(title, subtitle, button, buttonText, hint);
@@ -1480,6 +1481,51 @@ export class OceanScene extends Phaser.Scene {
       this.keyNumbers.forEach((key, index) => {
         if (Phaser.Input.Keyboard.JustDown(key)) this.selectUpgrade(choices[index]);
       });
+    }
+  }
+
+  private pollGamepad() {
+    let pads: ArrayLike<Gamepad | null> = [];
+    try {
+      if (!document.hidden && document.hasFocus()) pads = navigator.getGamepads?.() ?? [];
+    } catch {
+      // An embedding page can deny access to gamepads.
+    }
+    if (this.gamepad.update(pads) && !this.shootHolding && !this.keySpace?.isDown) {
+      // Unplugging the pad must not release a charged shot.
+      this.fireHeld = 0;
+      this.fireWasDown = false;
+    }
+    if (this.submarinePanel?.handleGamepad(this.gamepad) || this.pauseControls?.handleGamepad(this.gamepad)) {
+      this.gamepad.consumePresses();
+    }
+  }
+
+  private updateGamepadMenu() {
+    const count = this.menuTargets.length;
+    if (!count || this.time.now < this.menuInputLockedUntil) return;
+    const { x, y } = this.gamepad.nav;
+    const confirm = this.gamepad.justPressed(PAD.a);
+    if (confirm) this.audio.unlock();
+    if (x || y) {
+      if (this.menuMode === 'upgrade') {
+        const column = Phaser.Math.Clamp(this.menuSelection % 2 + x, 0, 1);
+        const row = Phaser.Math.Clamp(Math.floor(this.menuSelection / 2) + y, 0, 1);
+        this.menuSelection = row * 2 + column;
+      } else {
+        this.menuSelection = (this.menuSelection + (y || x) + count) % count;
+      }
+      const bounds = this.menuTargets[this.menuSelection].bounds;
+      if (!this.menuSelectionOutline) {
+        this.menuSelectionOutline = this.addMenuObject(this.add.rectangle(0, 0, 1, 1)
+          .setStrokeStyle(4, 0xfde047).setDepth(103));
+      }
+      this.menuSelectionOutline.setPosition(bounds.centerX, bounds.centerY)
+        .setSize(bounds.width + 7, bounds.height + 7);
+    }
+    if (confirm) {
+      this.gamepad.blockFire();
+      this.menuTargets[this.menuSelection]?.action();
     }
   }
 
@@ -2619,7 +2665,7 @@ export class OceanScene extends Phaser.Scene {
   /** 특별 잠수함 발사 버튼: 브레스·화염방사(누르는 동안), 볼티지 차지(뗄 때), 소드 크러셔 대시·가속 */
   private updateShipWeapons(dt: number, rawDt: number) {
     const ship = this.fleet.equipped;
-    const fireDown = this.shootHolding || !!this.keySpace?.isDown;
+    const fireDown = this.shootHolding || !!this.keySpace?.isDown || this.gamepad.fireDown;
     const justPressed = fireDown && !this.fireWasDown;
     const justReleased = !fireDown && this.fireWasDown;
     const heldBefore = this.fireHeld;
@@ -3064,11 +3110,28 @@ export class OceanScene extends Phaser.Scene {
     this.gameClock += rawDt;
 
     if (this.menuMode) {
+      this.updateGamepadMenu();
       this.updateMenuKeyboard();
       return;
     }
 
-    if (this.helicoprion.holdingPlayer && this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+    if (this.gamepad.justPressed(PAD.menu)) {
+      this.pauseControls?.pause();
+      return;
+    }
+    if (this.gamepad.justPressed(PAD.view) && this.submarinePanel?.show()) return;
+    if (this.mx3Boss.talking) {
+      this.gamepad.blockFire();
+      if (this.mx3Boss.choosing) {
+        if (this.gamepad.justPressed(PAD.a) || (this.keyNumbers[0] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[0]))) this.mx3Boss.advance(0);
+        else if (this.gamepad.justPressed(PAD.b) || (this.keyNumbers[1] && Phaser.Input.Keyboard.JustDown(this.keyNumbers[1]))) this.mx3Boss.advance(1);
+      } else if (this.gamepad.justPressed(PAD.a) || this.gamepad.justPressed(PAD.b) || (this.keyF && Phaser.Input.Keyboard.JustDown(this.keyF))) {
+        this.mx3Boss.advance();
+      }
+      return;
+    }
+
+    if (this.helicoprion.holdingPlayer && (this.gamepad.firePressed || (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)))) {
       this.helicoprion.escapePress();
     }
     const heldByHelicoprion = this.helicoprion.holdingPlayer;
@@ -3121,7 +3184,7 @@ export class OceanScene extends Phaser.Scene {
       }
     }
 
-    // 키보드 + 가상 조이스틱 이동 결합
+    // 키보드, 가상 조이스틱, 게임패드 이동
     let vx = 0;
     let vy = 0;
     if (this.cursors) {
@@ -3138,10 +3201,15 @@ export class OceanScene extends Phaser.Scene {
     } else if (this.joyPointerId !== null) {
       vx = this.joyVec.x;
       vy = this.joyVec.y;
+    } else {
+      ({ x: vx, y: vy } = this.gamepad.move);
     }
 
     const aimLength = Math.hypot(vx, vy);
-    if (aimLength > 0.08) {
+    if (this.gamepad.aim.x || this.gamepad.aim.y) {
+      this.aimDirection.x = this.gamepad.aim.x;
+      this.aimDirection.y = this.gamepad.aim.y;
+    } else if (aimLength > 0.08) {
       this.aimDirection.x = vx / aimLength;
       this.aimDirection.y = vy / aimLength;
     }
@@ -3191,6 +3259,19 @@ export class OceanScene extends Phaser.Scene {
         this.fireBullet();
       } else if (!this.autoFireEnabled && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
         this.fireBullet();
+      }
+    }
+    if (!heldByHelicoprion) {
+      if (this.gamepad.firePressed || (this.gamepad.fireDown && this.autoFireEnabled && this.shootCooldown <= 0)) this.fireBullet();
+      if (this.gamepad.justPressed(PAD.rb)) this.tryElectricShock();
+      if (this.gamepad.justPressed(PAD.b)) {
+        this.tryCollectNearbyFish();
+        if (this.mx3Boss.talking) return;
+      }
+      if (this.gamepad.justPressed(PAD.y)) this.emptyBagToTank();
+      if (this.gamepad.justPressed(PAD.x)) {
+        if (this.harvestBtnBg.visible) this.tryHarvest();
+        else if (this.mineBtnBg.visible) this.tryMineNearbyOre();
       }
     }
     if (!heldByHelicoprion && this.keyB && Phaser.Input.Keyboard.JustDown(this.keyB)) this.tryElectricShock();
