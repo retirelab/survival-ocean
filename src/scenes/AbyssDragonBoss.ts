@@ -26,7 +26,16 @@ interface Danger {
   flow?: { x: number; y: number; dx: number; dy: number; length: number; width: number };
 }
 type Flow = NonNullable<Danger['flow']>;
-const HYPER = { retreat: 0.65, pulses: 6, interval: 0.43, visible: 0.27, retreatScale: 0.66 } as const;
+const HYPER = {
+  retreat: 0.30,
+  pulses: 6,
+  interval: 0.20,
+  visible: 0.14,
+  retreatScale: 0.66,
+  lengthScale: 0.85,
+  widthScale: 0.5,
+  damageMultiplier: 1.75,
+} as const;
 interface Spike { gfx: Phaser.GameObjects.Triangle; vx: number; vy: number }
 
 const LOOT_ICONS: Record<string, string> = {
@@ -746,13 +755,15 @@ export class AbyssDragonBoss {
       const mouthY = this.sprite.y - this.sprite.displayHeight * 0.12;
       const angle = Math.atan2(p.y - mouthY, p.x - mouthX) + (pulse % 2 === 0 ? -0.12 : 0.12);
       hyper.beam = beam(mouthX, mouthY, mouthX + Math.cos(angle), mouthY + Math.sin(angle),
-        Math.hypot(width, height) * 1.25, Math.min(255, height * 0.39, width * 0.55));
+        Math.hypot(width, height) * HYPER.lengthScale, Math.min(255, height * 0.39, width * 0.55) * HYPER.widthScale);
       this.audio.playShoot();
     }
     if (phase % HYPER.interval > HYPER.visible || !hyper.beam) return;
     g?.fillStyle(0x38bdf8, 0.60).fillPoints(hyper.beam.points, true)
       .lineStyle(4, 0xcffafe, 0.88).strokePoints(hyper.beam.points, true);
-    if (Phaser.Geom.Polygon.Contains(hyper.beam, p.x, p.y)) this.host.damagePlayer(this.attackDamage, '수룡의 하이퍼 브레스');
+    if (Phaser.Geom.Polygon.Contains(hyper.beam, p.x, p.y)) {
+      this.host.damagePlayer(this.attackDamage * HYPER.damageMultiplier, '수룡의 하이퍼 브레스');
+    }
   }
 
   private stopSpecialAttacks() {
