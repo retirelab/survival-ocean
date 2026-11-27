@@ -216,6 +216,13 @@ const ORE_LAYOUT: Record<number, Partial<Record<OreNode['id'], { pos: [number, n
   },
 };
 const ORE_ZONES = Object.keys(ORE_LAYOUT).map(Number);
+/** 수상한 풀: 구역별 x 위치(화면 비율)와 바닥 높이(px) */
+const SUSPICIOUS_GRASS: Record<number, { xs: number[]; floor: number }> = {
+  0: { xs: [0.2, 0.48, 0.74], floor: 22 },
+  1: { xs: [0.48, 0.62, 0.76], floor: 22 },
+  4: { xs: [0.22, 0.5, 0.76], floor: 66 },
+  5: { xs: [0.36, 0.58, 0.76], floor: 58 },
+};
 const UPGRADE_TITLES = [
   { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
   { name: 'BRONZE', medal: '🥉', border: 0xb87333, text: '#fdba74' },
@@ -274,6 +281,7 @@ export class OceanScene extends Phaser.Scene {
 
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private decoGraphics!: Phaser.GameObjects.Graphics;
+  private grassImages: Phaser.GameObjects.Image[] = [];
   private bubbles: Phaser.GameObjects.Arc[] = [];
   private fishList: FishEntity[] = [];
   private bullets: BulletEntity[] = [];
@@ -404,6 +412,7 @@ export class OceanScene extends Phaser.Scene {
     AbyssDragonBoss.preload(this);
     for (const key of new Set(Object.values(MINERAL_ICONS))) this.load.image(key, `assets/items/${key}.png`);
     this.load.image('loot-helicoprion-jaw', 'assets/items/loot-helicoprion-jaw.png');
+    this.load.image('suspicious-grass', 'assets/items/suspicious-grass.png');
     for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
     for (const { key } of UNDERWORLD_2F_FISH) this.load.image(key, `assets/fish/${key}.png`);
   }
@@ -415,6 +424,7 @@ export class OceanScene extends Phaser.Scene {
 
     this.bgGraphics = this.add.graphics();
     this.decoGraphics = this.add.graphics();
+    this.grassImages = [0, 1, 2].map(() => this.add.image(0, 0, 'suspicious-grass').setOrigin(0.5, 1).setVisible(false));
 
     for (let i = 0; i < 22; i++) {
       const bubble = this.add.circle(
@@ -2196,6 +2206,24 @@ export class OceanScene extends Phaser.Scene {
     } else if (GLACIAL_PASSAGE_WALLS[this.zoneIndex]) {
       this.drawGlacialPassage(width, height);
     }
+    this.placeSuspiciousGrass(width, height);
+  }
+
+  /** 수상한 풀 3포기를 현재 구역 바닥에 세웁니다(해당 구역이 아니면 숨김). */
+  private placeSuspiciousGrass(width: number, height: number) {
+    const spot = SUSPICIOUS_GRASS[this.zoneIndex];
+    this.grassImages.forEach((img, index) => {
+      const x = spot?.xs[index];
+      if (x === undefined) {
+        img.setVisible(false);
+        return;
+      }
+      const size = index === 1 ? 92 : 78;
+      img.setPosition(width * x, height - spot.floor + 4)
+        .setDisplaySize(size * (320 / 237), size)
+        .setFlipX(index === 2)
+        .setVisible(true);
+    });
   }
 
   private drawGlacialPassage(width: number, height: number) {
