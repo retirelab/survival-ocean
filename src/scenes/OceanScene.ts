@@ -364,6 +364,7 @@ export class OceanScene extends Phaser.Scene {
 
   private pauseControls?: PauseControls;
   private bagAquarium?: BagAquarium;
+  private fishArtCache = new Map<string, string>();
   private savedGame = readSave();
 
   private spawnTimer = 0;
@@ -2113,10 +2114,31 @@ export class OceanScene extends Phaser.Scene {
     const spec = [...SHALLOW_FISH, ...MID_FISH, ...DEEP_FISH, ...GLACIAL_FISH, ...UNDERWORLD_2F_FISH]
       .find(fish => fish.name === name);
     if (!spec || !this.textures.exists(spec.key)) return;
-    const image = this.textures.get(spec.key).getSourceImage();
-    if (image instanceof HTMLImageElement) {
-      return { src: image.currentSrc || image.src, facesLeft: this.fishArtworkFacesLeft(spec) };
+    const src = this.fishArtSrc(spec.key);
+    if (src) return { src, facesLeft: this.fishArtworkFacesLeft(spec) };
+  }
+
+  /**
+   * 수조(HTML)에 쓸 물고기 그림 주소. 큰 PNG는 Phaser가 blob: 주소로 읽은 뒤 바로 해제하므로
+   * 그 주소를 그대로 쓰면 그림이 안 보입니다. 이미 읽은 그림을 data URL로 한 번 복사해 둡니다.
+   */
+  private fishArtSrc(key: string): string | undefined {
+    const cached = this.fishArtCache.get(key);
+    if (cached) return cached;
+    const image = this.textures.get(key).getSourceImage();
+    if (!(image instanceof HTMLImageElement || image instanceof HTMLCanvasElement)) return;
+    let src = image instanceof HTMLImageElement ? image.currentSrc || image.src : '';
+    if (!src.startsWith('data:')) {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      if (!context || !canvas.width || !canvas.height) return;
+      context.drawImage(image, 0, 0);
+      src = canvas.toDataURL('image/png');
     }
+    this.fishArtCache.set(key, src);
+    return src;
   }
 
   private emptyBagToTank() {
