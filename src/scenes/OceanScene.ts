@@ -5,6 +5,7 @@ import { FISH_SPRITES } from '../assets/fishSprites';
 import { GameAudio } from '../audio/GameAudio';
 import { GamepadControls, PAD } from '../game/GamepadControls';
 import { BagAquarium } from '../game/BagAquarium';
+import { storageView } from '../game/ItemStorage';
 import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, holdWeapon, shipAttack, voltChargeLevel, sawBoost, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
@@ -643,6 +644,7 @@ export class OceanScene extends Phaser.Scene {
       bag: () => this.bag,
       capacity: this.maxBag,
       art: name => this.bagFishArt(name),
+      storage: () => storageView(this.mineralInventory, this.cropInventory, this.dragonLoot),
     });
     this.breathGraphics = this.add.graphics().setDepth(8);
     this.armorGraphics = this.add.graphics().setDepth(11);
