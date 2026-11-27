@@ -3,6 +3,7 @@ import { isHelicoprionSave, type HelicoprionSave } from './Helicoprion.js';
 import { MX3_ZONE_INDEX, isMX3Save, type MX3Save } from './MX3.js';
 import { ABYSS_DRAGON, isAbyssDragonSave, type AbyssDragonSave } from './AbyssDragon.js';
 import { isCropInventory, isGrassSave, type CropName, type GrassState } from './Crops.js';
+import { isCookingSave, type CookingSave } from './Cooking.js';
 
 export const SAVE_KEY = 'survival-ocean.save.v1';
 /** 저장할 수 있는 가장 큰 구역 번호. */
@@ -33,6 +34,7 @@ export interface SaveGame {
   crops?: Partial<Record<CropName, number>>;
   /** 수상한 풀 수확 상태(예전 저장에는 없음) */
   grasses?: GrassState[];
+  cooking?: CookingSave;
   savedAt: number;
   zoneIndex: number;
   level: number;
@@ -71,6 +73,7 @@ export function isSaveGame(value: unknown): value is SaveGame {
   if (value.abyssDragon !== undefined && !isAbyssDragonSave(value.abyssDragon)) return false;
   if (value.crops !== undefined && !isCropInventory(value.crops)) return false;
   if (value.grasses !== undefined && !isGrassSave(value.grasses)) return false;
+  if (value.cooking !== undefined && !isCookingSave(value.cooking)) return false;
   const expanded = (object(progress) && progress.maxLevelExpanded === true) || (value.zoneIndex as number) >= 4;
   if (!expanded && (value.level as number) > BASE_MAX_LEVEL) return false;
   if (value.combat !== undefined && (!object(value.combat) || !number(value.combat.armorRemaining, 0, 5) || !number(value.combat.shockCooldown, 0, 30) ||

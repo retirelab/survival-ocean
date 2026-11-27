@@ -6,6 +6,7 @@ import { GameAudio } from '../audio/GameAudio';
 import { GamepadControls, PAD } from '../game/GamepadControls';
 import { BagAquarium } from '../game/BagAquarium';
 import { storageView } from '../game/ItemStorage';
+import { COOK_TIME_MS, completeCooking, eatMeal, takeIngredients, type CookingSave, type Recipe } from '../game/Cooking';
 import { COMBAT, newFishStatus, applyWeaponStatus, tickFishStatus, fishMovementSeconds, effectiveDefense, weaponForShip, holdWeapon, shipAttack, voltChargeLevel, sawBoost, distanceToSegment, segmentHitsRect, type FishStatus, type WeaponKind } from '../game/SubmarineCombat';
 import { SubmarinePanel } from '../game/SubmarinePanel';
 import { SUBMARINES, getSubmarine, newFleet, craftOrEquip, damageEquippedSubmarine, inventoryResources, submarineImage, ALL_MINERALS, RARE_MINERALS, LOOT_MATERIALS, type MineralName } from '../game/Submarines';
@@ -280,6 +281,7 @@ export class OceanScene extends Phaser.Scene {
   private grassStates: GrassState[] = newGrassStates();
   private nearbyGrass?: GrassState;
   private cropInventory = Object.fromEntries(CROP_NAMES.map(name => [name, 0])) as Record<CropName, number>;
+  private cooking: CookingSave = { meals: {} };
   private bubbles: Phaser.GameObjects.Arc[] = [];
   private fishList: FishEntity[] = [];
   private bullets: BulletEntity[] = [];
@@ -645,6 +647,16 @@ export class OceanScene extends Phaser.Scene {
       capacity: this.maxBag,
       art: name => this.bagFishArt(name),
       storage: () => storageView(this.mineralInventory, this.cropInventory, this.dragonLoot),
+      kitchen: {
+        ingredients: recipe => [
+          { name: recipe.fish, available: this.bag.filter(name => name === recipe.fish).length, source: '가방' },
+          ...recipe.crops.map(name => ({ name, available: this.cropInventory[name], source: '보관소' })),
+        ],
+        state: () => this.cooking,
+        start: recipe => this.startCooking(recipe),
+        eat: id => this.consumeMeal(id),
+        health: () => ({ hp: this.playerHp, maxHp: this.maxHp }),
+      },
     });
     this.breathGraphics = this.add.graphics().setDepth(8);
     this.armorGraphics = this.add.graphics().setDepth(11);
@@ -873,6 +885,7 @@ export class OceanScene extends Phaser.Scene {
       ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
       crops: { ...this.cropInventory },
       grasses: this.grassStates.map(grass => ({ ...grass })),
+      cooking: { meals: { ...this.cooking.meals }, job: this.cooking.job && { ...this.cooking.job } },
       menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
         nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
         spawnY: (this.pendingZoneTransition?.spawnY ?? 56) / height },
@@ -901,6 +914,7 @@ export class OceanScene extends Phaser.Scene {
     for (const name of ALL_MINERALS) this.mineralInventory[name] = save.minerals[name] ?? 0;
     for (const name of CROP_NAMES) this.cropInventory[name] = save.crops?.[name] ?? 0;
     this.grassStates = restoreGrassStates(save.grasses);
+    this.cooking = { meals: { ...save.cooking?.meals }, job: save.cooking?.job && { ...save.cooking.job } };
     this.upgradeRanks = { ...save.upgrades };
     this.completedUpgradeStages = new Set(save.completedStages);
     const stats = save.stats;
@@ -1514,6 +1528,13 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private pollGamepad(_time: number, deltaMs: number) {
+    const now = Date.now();
+    const finished = completeCooking(this.cooking, now);
+    if (finished) {
+      this.audio.playCollect();
+      this.showNotice(`🍳 ${finished.name} 완성! 아이템 보관소에 넣었어요.`);
+    }
+    this.bagAquarium?.updateCooking(now, finished);
     let pads: ArrayLike<Gamepad | null> = [];
     try {
       if (!document.hidden && document.hasFocus()) pads = navigator.getGamepads?.() ?? [];
@@ -1531,6 +1552,23 @@ export class OceanScene extends Phaser.Scene {
       this.gamepad.consumePresses();
       this.gamepad.cancelMenuPress();
     }
+  }
+
+  private startCooking(recipe: Recipe) {
+    if (this.cooking.job || !takeIngredients(recipe, this.bag, this.cropInventory)) return false;
+    this.cooking.job = { recipeId: recipe.id, readyAt: Date.now() + COOK_TIME_MS };
+    this.updateHud();
+    return true;
+  }
+
+  private consumeMeal(id: string) {
+    const healed = eatMeal(this.cooking, id, this.playerHp, this.maxHp);
+    if (healed) {
+      this.playerHp += healed;
+      this.audio.playCollect();
+      this.updateHud();
+    }
+    return healed;
   }
 
   private updateGamepadMenu() {
@@ -3143,6 +3181,7 @@ export class OceanScene extends Phaser.Scene {
     this.dragonLoot = [];
     for (const name of ALL_MINERALS) this.mineralInventory[name] = 0;
     for (const name of CROP_NAMES) this.cropInventory[name] = 0;
+    this.cooking = { meals: {} };
     this.fleet = damageEquippedSubmarine(this.fleet);
     this.armorRemaining = 0;
     this.playerParalysis = 0;

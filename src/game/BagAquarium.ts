@@ -1,5 +1,7 @@
 import { controlGamepadDialog, PAD, type GamepadControls } from './GamepadControls.js';
 import type { StorageView } from './ItemStorage.js';
+import { RECIPES, type Recipe } from './Cooking.js';
+import { CookingPanel, type KitchenHandlers } from './CookingPanel.js';
 
 interface FishArt {
   src: string;
@@ -18,7 +20,10 @@ export class BagAquarium {
   private storagePane = document.createElement('section');
   private fishTab = document.createElement('button');
   private storageTab = document.createElement('button');
-  private view: 'fish' | 'storage' = 'fish';
+  private cookingTab = document.createElement('button');
+  private kitchen: CookingPanel;
+  private foodStatus = document.createElement('p');
+  private view: 'fish' | 'storage' | 'cooking' = 'fish';
 
   constructor(private handlers: {
     open: () => boolean;
@@ -28,7 +33,9 @@ export class BagAquarium {
     capacity: number;
     art: (name: string) => FishArt | undefined;
     storage: () => StorageView[];
+    kitchen: KitchenHandlers;
   }) {
+    this.kitchen = new CookingPanel(handlers.kitchen);
     this.dialog.className = 'bag-aquarium';
     this.dialog.setAttribute('aria-label', '가방 속 물고기');
     this.count.setAttribute('aria-live', 'polite');
@@ -36,7 +43,9 @@ export class BagAquarium {
     head.append(this.title, this.count);
     const tabs = document.createElement('nav');
     tabs.className = 'bag-aquarium-tabs';
-    for (const [tab, label, view] of [[this.fishTab, '🐟 물고기 · ←', 'fish'], [this.storageTab, '📦 아이템 보관소 · → / RB', 'storage']] as const) {
+    for (const [tab, label, view] of [[this.fishTab, '🐟 물고기 · ←', 'fish'],
+      [this.cookingTab, '🍳 요리 · → / LB', 'cooking'],
+      [this.storageTab, '📦 보관소 · RB', 'storage']] as const) {
       tab.type = 'button';
       tab.textContent = label;
       tab.onclick = () => this.setView(view);
@@ -54,8 +63,13 @@ export class BagAquarium {
     this.emptyButton.onclick = () => this.empty();
     actions.append(this.emptyButton, this.closeButton);
     this.dialog.addEventListener('keydown', event => {
-      if (event.key === 'ArrowRight') this.setView('storage');
+      if (event.key === 'ArrowRight' && this.view !== 'storage') this.setView(this.view === 'fish' ? 'cooking' : 'storage');
       else if (event.key === 'ArrowLeft') this.setView('fish');
+      else if (this.view === 'cooking' && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        this.kitchen.moveSelection(event.key === 'ArrowDown' ? 1 : -1);
+      } else if (this.view === 'cooking' && event.code === 'KeyQ') {
+        if (!event.repeat) this.kitchen.start();
+      }
       else return;
       event.preventDefault();
     });
@@ -65,7 +79,8 @@ export class BagAquarium {
     });
     this.fishPane.append(this.tank, this.legend);
     this.storagePane.className = 'bag-storage';
-    this.dialog.append(head, tabs, this.fishPane, this.storagePane, actions);
+    this.foodStatus.setAttribute('role', 'status');
+    this.dialog.append(head, tabs, this.fishPane, this.kitchen.element, this.storagePane, actions);
     document.body.append(this.dialog);
   }
 
@@ -92,41 +107,85 @@ export class BagAquarium {
 
   handleGamepad(pad: GamepadControls) {
     if (!this.dialog.open) return false;
-    if (pad.justPressed(PAD.lt)) this.close();
-    else if (pad.justPressed(PAD.rb)) this.setView(this.view === 'fish' ? 'storage' : 'fish');
-    else if (pad.menuLongPressed) this.empty();
+    if (pad.justPressed(PAD.lt) || pad.justPressed(PAD.b)) this.close();
+    else if (pad.justPressed(PAD.lb)) this.setView(this.view === 'cooking' ? 'fish' : 'cooking');
+    else if (pad.justPressed(PAD.rb)) this.setView(this.view === 'storage' ? 'fish' : 'storage');
+    else if (this.view === 'cooking' && pad.justPressed(PAD.y)) this.kitchen.start();
+    else if (this.view === 'cooking' && pad.nav.y && this.kitchen.element.contains(document.activeElement)) this.kitchen.moveSelection(pad.nav.y);
+    else if (this.view !== 'cooking' && pad.menuLongPressed) this.empty();
     else controlGamepadDialog(pad, this.dialog, () => this.close());
     return true;
   }
 
-  /** 물고기 화면과 아이템 보관소를 오갑니다. */
-  setView(view: 'fish' | 'storage') {
+  setView(view: typeof this.view) {
     if (!this.dialog.open) return;
     this.view = view;
     this.render();
+    if (view === 'cooking') this.kitchen.focusSelection();
+    else this.closeButton.focus();
   }
 
-  get currentView() { return this.view; }
+  updateCooking(now: number, finished?: Recipe) {
+    if (finished) {
+      this.kitchen.finished(finished);
+      if (this.dialog.open && this.view === 'storage') this.renderStorage();
+    } else if (this.dialog.open && this.view === 'cooking') {
+      this.kitchen.updateProgress(now);
+    }
+  }
 
   private render() {
     const storage = this.view === 'storage';
-    this.dialog.classList.toggle('showing-storage', storage);
-    this.title.textContent = storage ? '아이템 보관소' : '가방 속 물고기';
-    this.fishPane.hidden = storage;
+    const cooking = this.view === 'cooking';
+    this.dialog.classList.toggle('showing-storage', storage || cooking);
+    this.title.textContent = cooking ? '요리' : storage ? '아이템 보관소' : '가방 속 물고기';
+    this.fishPane.hidden = this.view !== 'fish';
     this.storagePane.hidden = !storage;
-    this.emptyButton.hidden = storage;
-    this.fishTab.setAttribute('aria-pressed', String(!storage));
+    this.kitchen.element.hidden = !cooking;
+    this.emptyButton.hidden = this.view !== 'fish';
+    this.fishTab.setAttribute('aria-pressed', String(this.view === 'fish'));
     this.storageTab.setAttribute('aria-pressed', String(storage));
-    if (storage) this.renderStorage();
+    this.cookingTab.setAttribute('aria-pressed', String(cooking));
+    if (cooking) {
+      this.count.textContent = `${RECIPES.length}가지 음식`;
+      this.kitchen.render();
+    } else if (storage) this.renderStorage();
     else this.renderFish();
   }
 
   private renderStorage() {
+    const focusedMeal = this.storagePane.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).dataset.recipe : undefined;
+    const scrollTop = this.storagePane.scrollTop;
     const sections = this.handlers.storage();
     const total = sections.reduce((sum, section) => sum + section.groups.reduce((a, group) =>
       a + group.items.reduce((b, item) => b + item.count, 0), 0), 0);
-    this.count.textContent = `아이템 ${total}개`;
-    this.storagePane.replaceChildren(...sections.map(section => {
+    const meals = this.handlers.kitchen.state().meals;
+    const { hp, maxHp } = this.handlers.kitchen.health();
+    this.count.textContent = `아이템 ${total + Object.values(meals).reduce((sum, count) => sum + count, 0)}개`;
+    const food = document.createElement('section');
+    food.className = 'bag-food';
+    const heading = document.createElement('h3');
+    heading.textContent = `완성된 음식 · 체력 ${Math.ceil(hp)}/${maxHp}`;
+    const options = document.createElement('div');
+    for (const dish of RECIPES) {
+      const count = meals[dish.id];
+      if (!count) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.recipe = dish.id;
+      button.textContent = `${dish.icon} ${dish.name} ×${count} · +${dish.heal} HP`;
+      button.onclick = () => {
+        const recovered = this.handlers.kitchen.eat(dish.id);
+        this.foodStatus.textContent = recovered
+          ? `${dish.name} 먹기 · 체력 +${recovered}` : '체력이 가득 차 있어요.';
+        if (recovered) this.renderStorage();
+      };
+      options.append(button);
+    }
+    if (!options.childElementCount) options.textContent = '완성된 음식이 없어요.';
+    food.append(heading, options, this.foodStatus);
+    this.storagePane.replaceChildren(food, ...sections.map(section => {
       const row = document.createElement('div');
       row.className = `bag-storage-row ${section.id}`;
       const label = document.createElement('span');
@@ -171,6 +230,11 @@ export class BagAquarium {
       row.append(label, groups);
       return row;
     }));
+    this.storagePane.scrollTop = scrollTop;
+    if (focusedMeal) {
+      const buttons = Array.from(options.querySelectorAll('button'));
+      (buttons.find(button => button.dataset.recipe === focusedMeal) ?? buttons[0] ?? this.closeButton).focus({ preventScroll: true });
+    }
   }
 
   private renderFish() {

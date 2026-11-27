@@ -1,6 +1,6 @@
 // Button and axis indices of the browser's standard gamepad layout.
 export const PAD = {
-  a: 0, b: 1, x: 2, y: 3, rb: 5, lt: 6, rt: 7, view: 8, menu: 9,
+  a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9,
   up: 12, down: 13, left: 14, right: 15,
 } as const;
 const MENU_HOLD_MS = 500;
@@ -98,7 +98,7 @@ export function controlGamepadDialog(pad: GamepadControls, dialog: HTMLElement, 
   if (pad.justPressed(PAD.b)) { close(); return; }
   const step = pad.nav.y || pad.nav.x;
   if (!step && !pad.justPressed(PAD.a)) return;
-  const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+  const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])'));
   const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
   if (step && buttons.length) {
     buttons[current < 0 ? 0 : (current + step + buttons.length) % buttons.length].focus();

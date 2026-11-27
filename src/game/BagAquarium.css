@@ -161,3 +161,96 @@
   .bag-storage-row.ore .bag-storage-label { clip-path: none; padding-top: 2px; border-radius: 6px; }
   .bag-storage-row.material .bag-storage-group { flex-basis: 100%; }
 }
+
+.bag-kitchen {
+  display: grid;
+  grid-template-columns: minmax(120px, .8fr) minmax(175px, 1.25fr) minmax(140px, 1fr);
+  gap: 12px;
+  margin: 12px 0;
+}
+.kitchen-recipe, .kitchen-station, .kitchen-list {
+  min-width: 0;
+  border: 1px solid #315c75;
+  border-radius: 12px;
+  background: #0a2b41;
+}
+.kitchen-recipe { padding: 12px; }
+.kitchen-recipe h3, .bag-food h3 { font-size: 15px; }
+.kitchen-recipe strong { display: block; margin: 8px 0; color: #9be3a7; }
+.kitchen-recipe ul { list-style: none; font-size: 13px; line-height: 1.8; }
+.kitchen-recipe li.missing { color: #ffa99e; }
+.kitchen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px;
+  overflow-y: auto;
+  max-height: 300px;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.kitchen-list button { flex: none; text-align: left; }
+.kitchen-list button[aria-pressed='true'] { background: #1b6480; border-color: #facc72; }
+.kitchen-station {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  align-content: center;
+  padding: 10px;
+  text-align: center;
+}
+.kitchen-counter {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: end;
+  gap: 14px;
+  width: 100%;
+  min-height: 95px;
+  margin-bottom: 4px;
+  padding: 6px 18px 14px 2px;
+  background: linear-gradient(transparent 86%, #9c6437 86%, #d49e5b 91%, #6f432c 92%);
+}
+.kitchen-utensils {
+  transform: rotate(-13deg);
+  padding: 10px 3px 4px;
+  border-radius: 50%;
+  background: #b47a46;
+}
+.kitchen-pan {
+  position: relative;
+  width: min(66px, 48%);
+  aspect-ratio: 1;
+  border: 6px solid #879aaa;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 37%, #5a6d7b, #202e3b 68%);
+  box-shadow: 0 5px 0 #101922, 0 9px 0 #4d6476;
+}
+.kitchen-pan::after {
+  content: '';
+  position: absolute;
+  top: 29%;
+  left: 99%;
+  width: 60%;
+  height: 11px;
+  transform: rotate(-24deg);
+  transform-origin: left center;
+  border-radius: 4px;
+  background: linear-gradient(#8fa4b6, #364953);
+}
+.cooking .kitchen-pan { box-shadow: 0 5px 0 #101922, 0 9px 0 #f59655, 0 12px 12px #ff8741a0; }
+.kitchen-station progress { width: 100%; max-width: 210px; accent-color: #facc72; }
+.kitchen-station span, .kitchen-message, .bag-food { font-size: 13px; }
+.kitchen-message { color: #bdddea; }
+.kitchen-message:empty, .bag-food p:empty { display: none; }
+.bag-food { padding: 10px; border: 1px solid #4b7788; border-radius: 10px; background: #103248; }
+.bag-food div { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0; }
+.bag-storage, .bag-aquarium { touch-action: pan-y; }
+
+@media (max-width: 580px) {
+  .bag-kitchen { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kitchen-list { grid-column: 1 / -1; max-height: min(27dvh, 200px); }
+  .kitchen-counter { min-height: 64px; }
+  .kitchen-pan { width: min(48px, 44%); }
+  .kitchen-utensils { padding: 2px; }
+}
