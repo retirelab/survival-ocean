@@ -14,6 +14,7 @@ import { ABYSS_DRAGON, abyssBiteParalyzes } from '../game/AbyssDragon';
 import { AbyssDragonBoss } from './AbyssDragonBoss';
 import { NEST_ENTRANCE } from '../game/Helicoprion';
 import { GLACIAL_ZONE_INDEX, FIRST_GLACIAL_PASSAGE, SECOND_GLACIAL_PASSAGE, GLACIAL_PASSAGE_WALLS, hitsGlacialWall, glacialPassageExit } from '../game/GlacialPassages';
+import { CROPS, CROP_NAMES, GRASS_HARVESTS, GRASS_LAYOUT, GRASS_REGROW_SECONDS, harvestGrass, newGrassStates, restoreGrassStates, tickGrass, type CropName, type GrassState } from '../game/Crops';
 import { readSave, resolveProgress, writeSave, BASE_MAX_LEVEL, EXPANDED_MAX_LEVEL, ORE_IDS, type SaveGame } from '../game/SaveGame';
 
 const ROCK_BREAM_SPRITE =
@@ -216,13 +217,6 @@ const ORE_LAYOUT: Record<number, Partial<Record<OreNode['id'], { pos: [number, n
   },
 };
 const ORE_ZONES = Object.keys(ORE_LAYOUT).map(Number);
-/** 수상한 풀: 구역별 x 위치(화면 비율)와 바닥 높이(px) */
-const SUSPICIOUS_GRASS: Record<number, { xs: number[]; floor: number }> = {
-  0: { xs: [0.2, 0.48, 0.74], floor: 22 },
-  1: { xs: [0.48, 0.62, 0.76], floor: 22 },
-  4: { xs: [0.22, 0.5, 0.76], floor: 66 },
-  5: { xs: [0.36, 0.58, 0.76], floor: 58 },
-};
 const UPGRADE_TITLES = [
   { name: '기본', medal: '🔵', border: 0x0ea5e9, text: '#7dd3fc' },
   { name: 'BRONZE', medal: '🥉', border: 0xb87333, text: '#fdba74' },
@@ -282,6 +276,9 @@ export class OceanScene extends Phaser.Scene {
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private decoGraphics!: Phaser.GameObjects.Graphics;
   private grassImages: Phaser.GameObjects.Image[] = [];
+  private grassStates: GrassState[] = newGrassStates();
+  private nearbyGrass?: GrassState;
+  private cropInventory = Object.fromEntries(CROP_NAMES.map(name => [name, 0])) as Record<CropName, number>;
   private bubbles: Phaser.GameObjects.Arc[] = [];
   private fishList: FishEntity[] = [];
   private bullets: BulletEntity[] = [];
@@ -413,6 +410,7 @@ export class OceanScene extends Phaser.Scene {
     for (const key of new Set(Object.values(MINERAL_ICONS))) this.load.image(key, `assets/items/${key}.png`);
     this.load.image('loot-helicoprion-jaw', 'assets/items/loot-helicoprion-jaw.png');
     this.load.image('suspicious-grass', 'assets/items/suspicious-grass.png');
+    for (const crop of CROPS) this.load.image(crop.icon, `assets/items/${crop.icon}.png`);
     for (const [key, file] of Object.entries(GLACIAL_FISH_FILES)) this.load.image(key, `assets/fish/glacial-${file}.png`);
     for (const { key } of UNDERWORLD_2F_FISH) this.load.image(key, `assets/fish/${key}.png`);
   }
@@ -870,6 +868,8 @@ export class OceanScene extends Phaser.Scene {
       abyssDragon: this.abyssDragon.snapshot(),
       mx3: this.mx3Boss.snapshot(),
       ores: this.oreNodes.map(ore => ({ id: ore.id, remaining: ore.remaining, respawn: ore.respawnRemaining })),
+      crops: { ...this.cropInventory },
+      grasses: this.grassStates.map(grass => ({ ...grass })),
       menu: { stage: this.menuStage, upgrading: this.menuMode === 'upgrade',
         nextZone: this.pendingZoneTransition?.zoneIndex ?? null,
         spawnY: (this.pendingZoneTransition?.spawnY ?? 56) / height },
@@ -896,6 +896,8 @@ export class OceanScene extends Phaser.Scene {
     this.bag = [...save.bag];
     this.dragonLoot = [...save.dragonLoot];
     for (const name of ALL_MINERALS) this.mineralInventory[name] = save.minerals[name] ?? 0;
+    for (const name of CROP_NAMES) this.cropInventory[name] = save.crops?.[name] ?? 0;
+    this.grassStates = restoreGrassStates(save.grasses);
     this.upgradeRanks = { ...save.upgrades };
     this.completedUpgradeStages = new Set(save.completedStages);
     const stats = save.stats;
@@ -2209,22 +2211,38 @@ export class OceanScene extends Phaser.Scene {
     this.placeSuspiciousGrass(width, height);
   }
 
-  /** 수상한 풀 3포기를 현재 구역 바닥에 세웁니다(해당 구역이 아니면 숨김). */
+  /** 현재 구역 풀의 상태와 수확 지점(풀 가운데) */
+  private zoneGrasses(width = this.scale.width, height = this.scale.height): Array<{ state: GrassState; x: number; y: number; index: number }> {
+    const layout = GRASS_LAYOUT[this.zoneIndex];
+    if (!layout) return [];
+    return layout.xs.flatMap((x, index) => {
+      const state = this.grassStates.find(grass => grass.id === `${this.zoneIndex}-${index}`);
+      return state ? [{ state, x: width * x, y: height - layout.floor - 36, index }] : [];
+    });
+  }
+
+  /** 수상한 풀 3포기를 현재 구역 바닥에 세웁니다(해당 구역이 아니면 숨김). 다 캔 풀은 시들어 보입니다. */
   private placeSuspiciousGrass(width: number, height: number) {
-    const spot = SUSPICIOUS_GRASS[this.zoneIndex];
+    const layout = GRASS_LAYOUT[this.zoneIndex];
+    const grasses = this.zoneGrasses(width, height);
     this.grassImages.forEach((img, index) => {
-      const x = spot?.xs[index];
-      if (x === undefined) {
+      const grass = grasses.find(item => item.index === index);
+      if (!layout || !grass) {
         img.setVisible(false);
         return;
       }
       const size = index === 1 ? 92 : 78;
-      img.setPosition(width * x, height - spot.floor + 4)
-        .setDisplaySize(size * (320 / 237), size)
+      const withered = grass.state.remaining <= 0;
+      img.setPosition(grass.x, height - layout.floor + 4)
+        .setDisplaySize(size * (320 / 237), withered ? size * 0.55 : size)
         .setFlipX(index === 2)
+        .setAlpha(withered ? 0.55 : 1)
         .setVisible(true);
+      if (withered) img.setTint(0x78716c);
+      else img.clearTint();
     });
   }
+
 
   private drawGlacialPassage(width: number, height: number) {
     const g = this.decoGraphics;
@@ -2399,33 +2417,80 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private updateMiningInteraction() {
-    if (!ORE_LAYOUT[this.zoneIndex]) {
-      this.nearbyOre = undefined;
-      this.mineBtnBg.setVisible(false);
-      this.mineBtnText.setVisible(false);
-      return;
-    }
-    this.ensureOreNodes();
     let nearest: OreNode | undefined;
     let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const ore of this.zoneOres()) {
-      if (ore.remaining <= 0) continue;
-      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, ore.x, ore.y);
+    if (ORE_LAYOUT[this.zoneIndex]) {
+      this.ensureOreNodes();
+      for (const ore of this.zoneOres()) {
+        if (ore.remaining <= 0) continue;
+        const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, ore.x, ore.y);
+        if (distance <= 92 && distance < nearestDistance) {
+          nearest = ore;
+          nearestDistance = distance;
+        }
+      }
+    }
+    let grass: GrassState | undefined;
+    for (const spot of this.zoneGrasses()) {
+      if (spot.state.remaining <= 0) continue;
+      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, spot.x, spot.y);
       if (distance <= 92 && distance < nearestDistance) {
-        nearest = ore;
+        grass = spot.state;
         nearestDistance = distance;
       }
     }
-    this.nearbyOre = nearest;
-    this.mineBtnBg.setVisible(Boolean(nearest));
-    this.mineBtnText.setVisible(Boolean(nearest));
-    if (nearest) this.mineBtnText.setText(`⛏️ 광질 (E) ${nearest.remaining}/5`);
+    // 광석바위와 풀 중 더 가까운 쪽 하나만 버튼에 보여 줍니다.
+    this.nearbyGrass = grass;
+    this.nearbyOre = grass ? undefined : nearest;
+    const visible = Boolean(this.nearbyGrass || this.nearbyOre);
+    this.mineBtnBg.setVisible(visible).setFillStyle(grass ? 0x15803d : 0xb45309, 0.96);
+    this.mineBtnText.setVisible(visible);
+    if (grass) this.mineBtnText.setText(`🌿 수확 (E) ${grass.remaining}/${GRASS_HARVESTS}`);
+    else if (nearest) this.mineBtnText.setText(`⛏️ 광질 (E) ${nearest.remaining}/5`);
+  }
+
+  private harvestNearbyGrass() {
+    const grass = this.nearbyGrass;
+    const spot = this.zoneGrasses().find(item => item.state === grass);
+    const crop = grass ? harvestGrass(grass) : null;
+    if (!grass || !spot || !crop) {
+      this.audio.playDenied();
+      return;
+    }
+    this.cropInventory[crop] += 1;
+    this.audio.playCollect();
+    this.showHarvestedCrop(spot.x, spot.y, crop);
+    this.showNotice(grass.remaining > 0
+      ? `🌿 ${crop} 획득! 수상한 풀 남은 수확 ${grass.remaining}/${GRASS_HARVESTS}`
+      : `🌿 ${crop} 획득! 수상한 풀이 시들었어요. ${GRASS_REGROW_SECONDS}초 뒤 다시 자라요.`);
+    this.placeSuspiciousGrass(this.scale.width, this.scale.height);
+    this.updateMiningInteraction();
+    this.updateHud();
+  }
+
+  private showHarvestedCrop(x: number, y: number, name: CropName) {
+    const icon = CROPS.find(crop => crop.name === name)?.icon;
+    const item = icon && this.textures.exists(icon)
+      ? this.add.image(x, y - 8, icon).setDisplaySize(48, 48).setDepth(20)
+      : this.add.circle(x, y - 8, 14, 0x84cc16).setDepth(20);
+    const label = this.add.text(x, y - 40, name, {
+      fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
+      backgroundColor: 'rgba(2, 6, 23, 0.8)', padding: { x: 6, y: 3 },
+    }).setOrigin(0.5).setDepth(21);
+    this.tweens.add({
+      targets: [item, label], y: '-=55', alpha: 0, duration: 950, ease: 'Cubic.Out',
+      onComplete: () => { item.destroy(); label.destroy(); },
+    });
   }
 
   private tryMineNearbyOre() {
+    if (this.nearbyGrass) {
+      this.harvestNearbyGrass();
+      return;
+    }
     if (!ORE_LAYOUT[this.zoneIndex] || !this.nearbyOre || this.nearbyOre.remaining <= 0) {
       this.audio.playDenied();
-      this.showNotice('채굴할 수 있는 광석바위 가까이 다가가세요!');
+      this.showNotice('광석바위나 수상한 풀 가까이 다가가세요!');
       return;
     }
     const mined = this.rollMineral();
@@ -2460,6 +2525,14 @@ export class OceanScene extends Phaser.Scene {
   }
 
   private updateOreRespawns(dt: number) {
+    const hereGrass = new Set(this.zoneGrasses().map(item => item.state));
+    let regrown = false;
+    for (const grass of this.grassStates) if (tickGrass(grass, dt) && hereGrass.has(grass)) regrown = true;
+    if (regrown) {
+      this.placeSuspiciousGrass(this.scale.width, this.scale.height);
+      this.updateMiningInteraction();
+      this.showNotice(`🌿 수상한 풀이 다시 자라 ${GRASS_HARVESTS}번 수확할 수 있어요!`);
+    }
     let regenerated = false;
     const here = new Set(this.zoneOres());
     for (const ore of this.oreNodes) {
@@ -3045,6 +3118,7 @@ export class OceanScene extends Phaser.Scene {
     this.bag = [];
     this.dragonLoot = [];
     for (const name of ALL_MINERALS) this.mineralInventory[name] = 0;
+    for (const name of CROP_NAMES) this.cropInventory[name] = 0;
     this.fleet = damageEquippedSubmarine(this.fleet);
     this.armorRemaining = 0;
     this.playerParalysis = 0;
@@ -3152,11 +3226,18 @@ export class OceanScene extends Phaser.Scene {
       .map((ore) => `${ORE_LAYOUT[this.zoneIndex]?.[ore.id]?.label ?? ''} ${Math.ceil(ore.respawnRemaining)}초`)
       .join(' · ');
     const oreTimerText = oreRespawns ? `\n🪨 광석 재생까지: ${oreRespawns}` : '';
+    const cropTotal = Object.values(this.cropInventory).reduce((sum, count) => sum + count, 0);
+    const cropSummary = CROP_NAMES.filter(name => this.cropInventory[name] > 0)
+      .map(name => `${name}×${this.cropInventory[name]}`).join('  ');
+    const grassRegrows = this.zoneGrasses().filter(item => item.state.remaining <= 0)
+      .map(item => `${Math.ceil(item.state.regrow)}초`).join(' · ');
+    const cropText = (cropTotal > 0 ? `\n🌾 작물: ${cropSummary}` : '') + (grassRegrows ? `\n🌿 풀 재성장까지: ${grassRegrows}` : '');
+    const showMinerals = Boolean(ORE_LAYOUT[this.zoneIndex]) || mineralTotal > 0;
     this.mineralText
       .setText(
-        `${mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요'}${oreTimerText}`
+        `${showMinerals ? (mineralTotal > 0 ? `⛏️ 광물: ${mineralSummary}` : '⛏️ 광물: 아직 채굴한 광물이 없어요') : ''}${oreTimerText}${showMinerals ? cropText : cropText.trimStart()}`
       )
-      .setVisible(Boolean(ORE_LAYOUT[this.zoneIndex]) || mineralTotal > 0);
+      .setVisible(showMinerals || cropText.length > 0);
     this.bagText.setY(Math.max(132, this.hudText.y + this.hudText.height + 6));
     this.statsText.setY(this.bagText.y + this.bagText.height + 4);
     this.mineralText.setY(this.statsText.y + this.statsText.height + 4);
